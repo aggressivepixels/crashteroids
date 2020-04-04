@@ -90,10 +90,7 @@ viewShip { position, rotation } =
                     )
                 |> List.map (Vec2.add position)
     in
-    Svg.g []
-        [ viewPolygon transformed
-        , Svg.g [] (List.map viewPolygon (buildGhosts transformed))
-        ]
+    Svg.g [] [ viewPolygon transformed ]
 
 
 viewPolygon : List Vec2 -> Svg msg
@@ -104,19 +101,6 @@ viewPolygon vertices =
         , Html.Attributes.style "stroke-width" "2"
         ]
         []
-
-
-buildGhosts : List Vec2 -> List (List Vec2)
-buildGhosts vertices =
-    [ List.map (Vec2.add (vec2 960 0)) vertices
-    , List.map (Vec2.add (vec2 960 -540)) vertices
-    , List.map (Vec2.add (vec2 0 -540)) vertices
-    , List.map (Vec2.add (vec2 -960 -540)) vertices
-    , List.map (Vec2.add (vec2 -960 0)) vertices
-    , List.map (Vec2.add (vec2 -960 540)) vertices
-    , List.map (Vec2.add (vec2 0 540)) vertices
-    , List.map (Vec2.add (vec2 960 540)) vertices
-    ]
 
 
 toString : Vec2 -> String
