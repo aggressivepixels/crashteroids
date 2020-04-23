@@ -62,6 +62,28 @@ updateShip delta ship =
 
         newPosition =
             Vec2.add ship.position (Vec2.scale delta newSpeed)
+                |> Vec2.toRecord
+                |> (\{ x, y } ->
+                        vec2
+                            (if x < 0 then
+                                960
+
+                             else if x > 960 then
+                                0
+
+                             else
+                                x
+                            )
+                            (if y < 0 then
+                                540
+
+                             else if y > 540 then
+                                0
+
+                             else
+                                y
+                            )
+                   )
     in
     { ship
         | rotation = newRotation
