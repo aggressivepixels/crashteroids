@@ -93,6 +93,64 @@ viewShip { position, rotation } =
     Svg.g [] [ viewPolygon transformed ]
 
 
+type alias Bullet =
+    { position : Vec2
+    , rotation : Float
+    , turn : Float
+    }
+
+
+initBullet : Ship -> Bullet
+initBullet ship =
+    { position =
+        rotate ship.rotation (vec2 0 -12)
+            |> Vec2.add ship.position
+    , rotation = ship.rotation
+    , turn = 0
+    }
+
+
+updateBullet : Float -> Bullet -> Bullet
+updateBullet delta bullet =
+    { bullet
+        | position =
+            Vec2.add bullet.position
+                (Vec2.fromRecord
+                    { x = sin bullet.rotation * 350 * delta
+                    , y = negate (cos bullet.rotation * 350 * delta)
+                    }
+                )
+        , turn = bullet.turn + 0.2
+    }
+
+
+viewBullet : Bullet -> Svg Msg
+viewBullet { position, rotation, turn } =
+    let
+        vertices =
+            [ vec2 -3 -3, vec2 3 -3, vec2 3 3, vec2 -3 3 ]
+
+        transformed =
+            vertices
+                |> List.map (rotate turn)
+                |> List.map (rotate rotation)
+                |> List.map (Vec2.add position)
+    in
+    Svg.g [] [ viewPolygon transformed ]
+
+
+rotate : Float -> Vec2 -> Vec2
+rotate rotation v =
+    let
+        { x, y } =
+            Vec2.toRecord v
+    in
+    Vec2.fromRecord
+        { x = (cos rotation * x) - (sin rotation * y)
+        , y = (sin rotation * x) + (cos rotation * y)
+        }
+
+
 viewPolygon : List Vec2 -> Svg msg
 viewPolygon vertices =
     Svg.polygon
@@ -116,6 +174,7 @@ type alias Model =
     { width : Float
     , height : Float
     , ship : Ship
+    , bullets : List Bullet
     }
 
 
@@ -144,6 +203,7 @@ init _ =
     ( { width = width
       , height = height
       , ship = initShip (width / 2) (height / 2)
+      , bullets = []
       }
     , Cmd.none
     )
@@ -160,14 +220,21 @@ view model =
         , Html.Attributes.style "top" "50%"
         , Html.Attributes.style "transform" "translate(-50%, -50%)"
         ]
-        [ viewShip model.ship ]
+        [ viewShip model.ship
+        , Svg.g [] (List.map viewBullet model.bullets)
+        ]
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         FramePassed delta ->
-            ( { model | ship = updateShip delta model.ship }, Cmd.none )
+            ( { model
+                | ship = updateShip delta model.ship
+                , bullets = List.map (updateBullet delta) model.bullets
+              }
+            , Cmd.none
+            )
 
         KeyPressed key ->
             let
@@ -188,7 +255,17 @@ update msg model =
                         _ ->
                             ship
             in
-            ( { model | ship = newShip }, Cmd.none )
+            ( { model
+                | ship = newShip
+                , bullets =
+                    if key == " " then
+                        initBullet ship :: model.bullets
+
+                    else
+                        model.bullets
+              }
+            , Cmd.none
+            )
 
         KeyReleased key ->
             let
