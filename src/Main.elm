@@ -4,8 +4,9 @@ import Browser
 import Browser.Events as Events
 import Html exposing (Html)
 import Html.Attributes
-import Json.Decode as Decode exposing (Decoder)
+import Json.Decode as Decode exposing (Decoder, Value)
 import Math.Vector2 as Vec2 exposing (Vec2, vec2)
+import Random exposing (Generator, Seed)
 import Svg exposing (Svg)
 import Svg.Attributes
 
@@ -175,6 +176,8 @@ type alias Model =
     , height : Float
     , ship : Ship
     , bullets : List Bullet
+    , asteroids : List (List Vec2)
+    , seed : Seed
     }
 
 
@@ -184,7 +187,7 @@ type Msg
     | KeyReleased String
 
 
-main : Program () Model Msg
+main : Program Value Model Msg
 main =
     Browser.element
         { init = init
@@ -194,8 +197,8 @@ main =
         }
 
 
-init : () -> ( Model, Cmd Msg )
-init _ =
+init : Value -> ( Model, Cmd Msg )
+init flags =
     let
         ( width, height ) =
             ( 960, 540 )
@@ -204,6 +207,11 @@ init _ =
       , height = height
       , ship = initShip (width / 2) (height / 2)
       , bullets = []
+      , asteroids = []
+      , seed =
+            Decode.decodeValue (Decode.field "initialSeed" Decode.int) flags
+                |> Result.withDefault 0
+                |> Random.initialSeed
       }
     , Cmd.none
     )
@@ -222,7 +230,26 @@ view model =
         ]
         [ viewShip model.ship
         , Svg.g [] (List.map viewBullet model.bullets)
+        , Svg.g [] (List.map viewPolygon model.asteroids)
         ]
+
+
+asteroidGenerator : Generator (List Vec2)
+asteroidGenerator =
+    Random.list 7 (Random.int 25 40)
+        |> Random.map
+            (List.indexedMap
+                (\index distance ->
+                    let
+                        r =
+                            toFloat distance
+
+                        theta =
+                            toFloat (index * 45)
+                    in
+                    vec2 (r * cos theta) (r * sin theta)
+                )
+            )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -254,6 +281,21 @@ update msg model =
 
                         _ ->
                             ship
+
+                ( newAsteroids, newSeed ) =
+                    if key == "z" then
+                        Random.map
+                            (\asteroid ->
+                                List.map (Vec2.add (vec2 (model.width / 2) (model.height / 2))) asteroid
+                                    :: model.asteroids
+                            )
+                            asteroidGenerator
+                            |> (\asteroidsGenerator ->
+                                    Random.step asteroidsGenerator model.seed
+                               )
+
+                    else
+                        ( model.asteroids, model.seed )
             in
             ( { model
                 | ship = newShip
@@ -263,6 +305,8 @@ update msg model =
 
                     else
                         model.bullets
+                , asteroids = newAsteroids
+                , seed = newSeed
               }
             , Cmd.none
             )
