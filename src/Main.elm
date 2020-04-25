@@ -343,16 +343,23 @@ init flags =
     let
         ( width, height ) =
             ( 960, 540 )
+
+        oldSeed =
+            Decode.decodeValue (Decode.field "initialSeed" Decode.int) flags
+                |> Result.withDefault 0
+                |> Random.initialSeed
+
+        ( asteroids, seed ) =
+            asteroidGenerator (vec2 (width / 2) (height / 2))
+                |> Random.list 10
+                |> flip Random.step oldSeed
     in
     ( { width = width
       , height = height
       , ship = initShip (width / 2) (height / 2)
       , bullets = []
-      , asteroids = []
-      , seed =
-            Decode.decodeValue (Decode.field "initialSeed" Decode.int) flags
-                |> Result.withDefault 0
-                |> Random.initialSeed
+      , asteroids = asteroids
+      , seed = seed
       }
     , Cmd.none
     )
@@ -392,18 +399,55 @@ update msg model =
                             , left = -8
                             }
                         )
-                    <|
-                        case maybeBullet of
+                        (case maybeBullet of
                             Just bullet ->
                                 bullet :: model.bullets
 
                             Nothing ->
                                 model.bullets
+                        )
+                        |> List.map (updateBullet delta)
+
+                newAsteroids =
+                    List.map
+                        (\asteroid ->
+                            let
+                                newAsteroid =
+                                    updateAsteroid delta asteroid
+
+                                { x, y } =
+                                    Vec2.toRecord newAsteroid.position
+                            in
+                            { newAsteroid
+                                | position =
+                                    Vec2.fromRecord
+                                        { x =
+                                            if x < -40 then
+                                                1000
+
+                                            else if x > 1000 then
+                                                -40
+
+                                            else
+                                                x
+                                        , y =
+                                            if y < -40 then
+                                                600
+
+                                            else if y > 600 then
+                                                -40
+
+                                            else
+                                                y
+                                        }
+                            }
+                        )
+                        model.asteroids
             in
             ( { model
                 | ship = newShip
-                , bullets = List.map (updateBullet delta) newBullets
-                , asteroids = List.map (updateAsteroid delta) model.asteroids
+                , bullets = newBullets
+                , asteroids = newAsteroids
               }
             , Cmd.none
             )
@@ -429,21 +473,8 @@ update msg model =
 
                         _ ->
                             ship
-
-                ( newAsteroids, newSeed ) =
-                    if key == "z" then
-                        asteroidGenerator (vec2 (model.width / 2) (model.height / 2))
-                            |> Random.map (flip (::) model.asteroids)
-                            |> flip Random.step model.seed
-
-                    else
-                        ( model.asteroids, model.seed )
             in
-            ( { model
-                | ship = newShip
-                , asteroids = newAsteroids
-                , seed = newSeed
-              }
+            ( { model | ship = newShip }
             , Cmd.none
             )
 
