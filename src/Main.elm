@@ -1,5 +1,6 @@
 module Main exposing (main)
 
+import Basics.Extra exposing (flip)
 import Browser
 import Browser.Events as Events
 import Html exposing (Html)
@@ -177,7 +178,7 @@ updateBullet delta bullet =
                     , y = negate (cos bullet.rotation * 350 * delta)
                     }
                 )
-        , turn = bullet.turn + 0.2
+        , turn = bullet.turn + (delta * 12)
     }
 
 
@@ -194,6 +195,14 @@ viewBullet { position, rotation, turn } =
                 |> List.map (Vec2.add position)
     in
     Svg.g [] [ viewPolygon transformed ]
+
+
+type alias Asteroid =
+    { vertices : List Vec2
+    , turn : Float
+    , position : Vec2
+    , turnStep : Float
+    }
 
 
 rotate : Float -> Vec2 -> Vec2
@@ -232,7 +241,7 @@ type alias Model =
     , height : Float
     , ship : Ship
     , bullets : List Bullet
-    , asteroids : List (List Vec2)
+    , asteroids : List Asteroid
     , seed : Seed
     }
 
@@ -286,26 +295,53 @@ view model =
         ]
         [ viewShip model.ship
         , Svg.g [] (List.map viewBullet model.bullets)
-        , Svg.g [] (List.map viewPolygon model.asteroids)
+        , Svg.g [] (List.map viewAsteroid model.asteroids)
         ]
 
 
-asteroidGenerator : Generator (List Vec2)
-asteroidGenerator =
-    Random.list 8 (Random.int 25 40)
-        |> Random.map
-            (List.indexedMap
-                (\index distance ->
-                    let
-                        r =
-                            toFloat distance
+updateAsteroid : Float -> Asteroid -> Asteroid
+updateAsteroid delta a =
+    { a | turn = a.turn + (delta * a.turnStep) }
 
-                        theta =
-                            degrees (toFloat (index * 45))
-                    in
-                    vec2 (r * cos theta) (r * sin theta)
-                )
-            )
+
+viewAsteroid : Asteroid -> Html msg
+viewAsteroid a =
+    List.map (rotate a.turn) a.vertices
+        |> List.map (Vec2.add a.position)
+        |> viewPolygon
+
+
+asteroidGenerator : Vec2 -> Generator Asteroid
+asteroidGenerator position =
+    let
+        verticesGenerator =
+            Random.list 8 (Random.int 25 40)
+
+        rotationStepGenerator =
+            Random.float -0.8 0.8
+    in
+    Random.map2
+        (\distances turnStep ->
+            { vertices =
+                List.indexedMap
+                    (\index distance ->
+                        let
+                            r =
+                                toFloat distance
+
+                            theta =
+                                degrees (toFloat (index * 45))
+                        in
+                        vec2 (r * cos theta) (r * sin theta)
+                    )
+                    distances
+            , position = position
+            , turn = 0
+            , turnStep = turnStep
+            }
+        )
+        verticesGenerator
+        rotationStepGenerator
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -336,6 +372,7 @@ update msg model =
             ( { model
                 | ship = newShip
                 , bullets = List.map (updateBullet delta) newBullets
+                , asteroids = List.map (updateAsteroid delta) model.asteroids
               }
             , Cmd.none
             )
@@ -364,15 +401,9 @@ update msg model =
 
                 ( newAsteroids, newSeed ) =
                     if key == "z" then
-                        Random.map
-                            (\asteroid ->
-                                List.map (Vec2.add (vec2 (model.width / 2) (model.height / 2))) asteroid
-                                    :: model.asteroids
-                            )
-                            asteroidGenerator
-                            |> (\asteroidsGenerator ->
-                                    Random.step asteroidsGenerator model.seed
-                               )
+                        asteroidGenerator (vec2 (model.width / 2) (model.height / 2))
+                            |> Random.map (flip (::) model.asteroids)
+                            |> flip Random.step model.seed
 
                     else
                         ( model.asteroids, model.seed )
