@@ -292,7 +292,7 @@ view model =
 
 asteroidGenerator : Generator (List Vec2)
 asteroidGenerator =
-    Random.list 7 (Random.int 25 40)
+    Random.list 8 (Random.int 25 40)
         |> Random.map
             (List.indexedMap
                 (\index distance ->
@@ -301,7 +301,7 @@ asteroidGenerator =
                             toFloat distance
 
                         theta =
-                            toFloat (index * 45)
+                            degrees (toFloat (index * 45))
                     in
                     vec2 (r * cos theta) (r * sin theta)
                 )
