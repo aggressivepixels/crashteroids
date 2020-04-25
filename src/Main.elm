@@ -18,7 +18,14 @@ type alias Ship =
     , rotatingLeft : Bool
     , rotatingRight : Bool
     , accelerating : Bool
+    , pullingTrigger : Bool
+    , gunState : GunState
     }
+
+
+type GunState
+    = Idle
+    | Reloading Float
 
 
 initShip : Float -> Float -> Ship
@@ -29,10 +36,12 @@ initShip x y =
     , rotatingLeft = False
     , rotatingRight = False
     , accelerating = False
+    , gunState = Idle
+    , pullingTrigger = False
     }
 
 
-updateShip : Float -> Ship -> Ship
+updateShip : Float -> Ship -> ( Ship, Maybe Bullet )
 updateShip delta ship =
     let
         newRotation =
@@ -84,12 +93,37 @@ updateShip delta ship =
                                 y
                             )
                    )
+
+        ( newGunState, bullet ) =
+            case ( ship.gunState, ship.pullingTrigger ) of
+                ( Idle, True ) ->
+                    ( Reloading 0.2, Just (initBullet ship) )
+
+                ( Idle, False ) ->
+                    ( Idle, Nothing )
+
+                ( Reloading timeLeft, True ) ->
+                    if timeLeft - delta <= 0 then
+                        ( Reloading 0.2, Just (initBullet ship) )
+
+                    else
+                        ( Reloading (timeLeft - delta), Nothing )
+
+                ( Reloading timeLeft, False ) ->
+                    if timeLeft - delta <= 0 then
+                        ( Idle, Nothing )
+
+                    else
+                        ( Reloading (timeLeft - delta), Nothing )
     in
-    { ship
+    ( { ship
         | rotation = newRotation
         , speed = newSpeed
         , position = newPosition
-    }
+        , gunState = newGunState
+      }
+    , bullet
+    )
 
 
 viewShip : Ship -> Svg Msg
@@ -278,9 +312,30 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         FramePassed delta ->
+            let
+                ( newShip, maybeBullet ) =
+                    updateShip delta model.ship
+
+                newBullets =
+                    List.filter
+                        (isInside
+                            { top = -8
+                            , right = model.width + 8
+                            , bottom = model.height + 8
+                            , left = -8
+                            }
+                        )
+                    <|
+                        case maybeBullet of
+                            Just bullet ->
+                                bullet :: model.bullets
+
+                            Nothing ->
+                                model.bullets
+            in
             ( { model
-                | ship = updateShip delta model.ship
-                , bullets = List.map (updateBullet delta) model.bullets
+                | ship = newShip
+                , bullets = List.map (updateBullet delta) newBullets
               }
             , Cmd.none
             )
@@ -300,6 +355,9 @@ update msg model =
 
                         "w" ->
                             { ship | accelerating = True }
+
+                        " " ->
+                            { ship | pullingTrigger = True }
 
                         _ ->
                             ship
@@ -321,24 +379,6 @@ update msg model =
             in
             ( { model
                 | ship = newShip
-                , bullets =
-                    let
-                        newBullets =
-                            List.filter
-                                (isInside
-                                    { top = -8
-                                    , right = model.width + 8
-                                    , bottom = model.height + 8
-                                    , left = -8
-                                    }
-                                )
-                                model.bullets
-                    in
-                    if key == " " then
-                        initBullet ship :: newBullets
-
-                    else
-                        newBullets
                 , asteroids = newAsteroids
                 , seed = newSeed
               }
@@ -360,6 +400,9 @@ update msg model =
 
                         "w" ->
                             { ship | accelerating = False }
+
+                        " " ->
+                            { ship | pullingTrigger = False }
 
                         _ ->
                             ship
