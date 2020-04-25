@@ -214,6 +214,7 @@ type alias Asteroid =
     , rotation : Float
     , position : Vec2
     , rotationSpeed : Float
+    , angle : Float
     }
 
 
@@ -227,7 +228,14 @@ viewAsteroid asteroid =
 updateAsteroid : Float -> Asteroid -> Asteroid
 updateAsteroid delta asteroid =
     { asteroid
-        | rotation = asteroid.rotation + (delta * asteroid.rotationSpeed)
+        | position =
+            Vec2.add asteroid.position
+                (Vec2.fromRecord
+                    { x = sin asteroid.angle * 40 * delta
+                    , y = negate (cos asteroid.angle * 40 * delta)
+                    }
+                )
+        , rotation = asteroid.rotation + (delta * asteroid.rotationSpeed)
     }
 
 
@@ -238,10 +246,13 @@ asteroidGenerator position =
             Random.list 8 (Random.int 25 40)
 
         rotationSpeedGenerator =
-            Random.float -0.8 0.8
+            Random.float -1 1
+
+        angleGenerator =
+            Random.map degrees (Random.float 0 360)
     in
-    Random.map2
-        (\distances rotationSpeed ->
+    Random.map3
+        (\distances rotationSpeed angle ->
             { vertices =
                 List.indexedMap
                     (\index distance ->
@@ -258,10 +269,12 @@ asteroidGenerator position =
             , position = position
             , rotation = 0
             , rotationSpeed = rotationSpeed
+            , angle = angle
             }
         )
         verticesGenerator
         rotationSpeedGenerator
+        angleGenerator
 
 
 
