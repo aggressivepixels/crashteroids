@@ -12,6 +12,10 @@ import Svg exposing (Svg)
 import Svg.Attributes
 
 
+
+-- SHIP
+
+
 type alias Ship =
     { position : Vec2
     , speed : Vec2
@@ -40,6 +44,30 @@ initShip x y =
     , gunState = Idle
     , pullingTrigger = False
     }
+
+
+viewShip : Ship -> Svg Msg
+viewShip { position, angle } =
+    let
+        vertices =
+            [ vec2 0 -12, vec2 -8 12, vec2 0 8, vec2 8 12 ]
+
+        transformed =
+            vertices
+                |> List.map
+                    (\v ->
+                        let
+                            { x, y } =
+                                Vec2.toRecord v
+                        in
+                        Vec2.fromRecord
+                            { x = (cos angle * x) - (sin angle * y)
+                            , y = (sin angle * x) + (cos angle * y)
+                            }
+                    )
+                |> List.map (Vec2.add position)
+    in
+    Svg.g [] [ viewPolygon transformed ]
 
 
 updateShip : Float -> Ship -> ( Ship, Maybe Bullet )
@@ -127,28 +155,8 @@ updateShip delta ship =
     )
 
 
-viewShip : Ship -> Svg Msg
-viewShip { position, angle } =
-    let
-        vertices =
-            [ vec2 0 -12, vec2 -8 12, vec2 0 8, vec2 8 12 ]
 
-        transformed =
-            vertices
-                |> List.map
-                    (\v ->
-                        let
-                            { x, y } =
-                                Vec2.toRecord v
-                        in
-                        Vec2.fromRecord
-                            { x = (cos angle * x) - (sin angle * y)
-                            , y = (sin angle * x) + (cos angle * y)
-                            }
-                    )
-                |> List.map (Vec2.add position)
-    in
-    Svg.g [] [ viewPolygon transformed ]
+-- BULLET
 
 
 type alias Bullet =
@@ -168,20 +176,6 @@ initBullet ship =
     }
 
 
-updateBullet : Float -> Bullet -> Bullet
-updateBullet delta bullet =
-    { bullet
-        | position =
-            Vec2.add bullet.position
-                (Vec2.fromRecord
-                    { x = sin bullet.angle * 350 * delta
-                    , y = negate (cos bullet.angle * 350 * delta)
-                    }
-                )
-        , rotation = bullet.rotation + (delta * 12)
-    }
-
-
 viewBullet : Bullet -> Svg Msg
 viewBullet { position, angle, rotation } =
     let
@@ -197,12 +191,81 @@ viewBullet { position, angle, rotation } =
     Svg.g [] [ viewPolygon transformed ]
 
 
+updateBullet : Float -> Bullet -> Bullet
+updateBullet delta bullet =
+    { bullet
+        | position =
+            Vec2.add bullet.position
+                (Vec2.fromRecord
+                    { x = sin bullet.angle * 350 * delta
+                    , y = negate (cos bullet.angle * 350 * delta)
+                    }
+                )
+        , rotation = bullet.rotation + (delta * 12)
+    }
+
+
+
+-- ASTEROID
+
+
 type alias Asteroid =
     { vertices : List Vec2
     , rotation : Float
     , position : Vec2
     , rotationSpeed : Float
     }
+
+
+viewAsteroid : Asteroid -> Html msg
+viewAsteroid asteroid =
+    List.map (rotate asteroid.rotation) asteroid.vertices
+        |> List.map (Vec2.add asteroid.position)
+        |> viewPolygon
+
+
+updateAsteroid : Float -> Asteroid -> Asteroid
+updateAsteroid delta asteroid =
+    { asteroid
+        | rotation = asteroid.rotation + (delta * asteroid.rotationSpeed)
+    }
+
+
+asteroidGenerator : Vec2 -> Generator Asteroid
+asteroidGenerator position =
+    let
+        verticesGenerator =
+            Random.list 8 (Random.int 25 40)
+
+        rotationSpeedGenerator =
+            Random.float -0.8 0.8
+    in
+    Random.map2
+        (\distances rotationSpeed ->
+            { vertices =
+                List.indexedMap
+                    (\index distance ->
+                        let
+                            r =
+                                toFloat distance
+
+                            theta =
+                                degrees (toFloat (index * 45))
+                        in
+                        vec2 (r * cos theta) (r * sin theta)
+                    )
+                    distances
+            , position = position
+            , rotation = 0
+            , rotationSpeed = rotationSpeed
+            }
+        )
+        verticesGenerator
+        rotationSpeedGenerator
+
+
+
+-- HELPER FUNCTIONS
 
 
 rotate : Float -> Vec2 -> Vec2
@@ -234,6 +297,10 @@ toString v =
             Vec2.toRecord v
     in
     String.fromFloat x ++ "," ++ String.fromFloat y
+
+
+
+-- TEA
 
 
 type alias Model =
@@ -297,51 +364,6 @@ view model =
         , Svg.g [] (List.map viewBullet model.bullets)
         , Svg.g [] (List.map viewAsteroid model.asteroids)
         ]
-
-
-updateAsteroid : Float -> Asteroid -> Asteroid
-updateAsteroid delta a =
-    { a | rotation = a.rotation + (delta * a.rotationSpeed) }
-
-
-viewAsteroid : Asteroid -> Html msg
-viewAsteroid a =
-    List.map (rotate a.rotation) a.vertices
-        |> List.map (Vec2.add a.position)
-        |> viewPolygon
-
-
-asteroidGenerator : Vec2 -> Generator Asteroid
-asteroidGenerator position =
-    let
-        verticesGenerator =
-            Random.list 8 (Random.int 25 40)
-
-        rotationSpeedGenerator =
-            Random.float -0.8 0.8
-    in
-    Random.map2
-        (\distances rotationSpeed ->
-            { vertices =
-                List.indexedMap
-                    (\index distance ->
-                        let
-                            r =
-                                toFloat distance
-
-                            theta =
-                                degrees (toFloat (index * 45))
-                        in
-                        vec2 (r * cos theta) (r * sin theta)
-                    )
-                    distances
-            , position = position
-            , rotation = 0
-            , rotationSpeed = rotationSpeed
-            }
-        )
-        verticesGenerator
-        rotationSpeedGenerator
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
