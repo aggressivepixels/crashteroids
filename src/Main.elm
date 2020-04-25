@@ -212,8 +212,8 @@ updateBullet delta bullet =
 type alias Asteroid =
     { vertices : List Vec2
     , rotation : Float
-    , position : Vec2
     , rotationSpeed : Float
+    , position : Vec2
     , angle : Float
     }
 
@@ -240,41 +240,37 @@ updateAsteroid delta asteroid =
 
 
 asteroidGenerator : Vec2 -> Generator Asteroid
-asteroidGenerator position =
+asteroidGenerator _ =
     let
-        verticesGenerator =
+        vertices =
             Random.list 8 (Random.int 25 40)
+                |> Random.map
+                    (List.indexedMap
+                        (\index distance ->
+                            let
+                                r =
+                                    toFloat distance
 
-        rotationSpeedGenerator =
+                                theta =
+                                    degrees (toFloat (index * 45))
+                            in
+                            vec2 (r * cos theta) (r * sin theta)
+                        )
+                    )
+
+        rotation =
+            Random.constant 0
+
+        rotationSpeed =
             Random.float -1 1
 
-        angleGenerator =
+        position =
+            Random.map2 vec2 (Random.float 0 960) (Random.float 0 540)
+
+        angle =
             Random.map degrees (Random.float 0 360)
     in
-    Random.map3
-        (\distances rotationSpeed angle ->
-            { vertices =
-                List.indexedMap
-                    (\index distance ->
-                        let
-                            r =
-                                toFloat distance
-
-                            theta =
-                                degrees (toFloat (index * 45))
-                        in
-                        vec2 (r * cos theta) (r * sin theta)
-                    )
-                    distances
-            , position = position
-            , rotation = 0
-            , rotationSpeed = rotationSpeed
-            , angle = angle
-            }
-        )
-        verticesGenerator
-        rotationSpeedGenerator
-        angleGenerator
+    Random.map5 Asteroid vertices rotation rotationSpeed position angle
 
 
 
