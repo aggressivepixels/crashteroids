@@ -15,7 +15,7 @@ import Svg.Attributes
 type alias Ship =
     { position : Vec2
     , speed : Vec2
-    , rotation : Float
+    , angle : Float
     , rotatingLeft : Bool
     , rotatingRight : Bool
     , accelerating : Bool
@@ -33,7 +33,7 @@ initShip : Float -> Float -> Ship
 initShip x y =
     { position = vec2 x y
     , speed = vec2 0 0
-    , rotation = 0
+    , angle = 0
     , rotatingLeft = False
     , rotatingRight = False
     , accelerating = False
@@ -45,23 +45,23 @@ initShip x y =
 updateShip : Float -> Ship -> ( Ship, Maybe Bullet )
 updateShip delta ship =
     let
-        newRotation =
+        newAngle =
             case ( ship.rotatingLeft, ship.rotatingRight ) of
                 ( True, False ) ->
-                    ship.rotation - (4 * delta)
+                    ship.angle - (4 * delta)
 
                 ( False, True ) ->
-                    ship.rotation + (4 * delta)
+                    ship.angle + (4 * delta)
 
                 _ ->
-                    ship.rotation
+                    ship.angle
 
         newSpeed =
             if ship.accelerating then
                 Vec2.add ship.speed <|
                     Vec2.fromRecord
-                        { x = sin newRotation * 175 * delta
-                        , y = negate (cos newRotation * 175 * delta)
+                        { x = sin newAngle * 175 * delta
+                        , y = negate (cos newAngle * 175 * delta)
                         }
 
             else if Vec2.lengthSquared ship.speed > 1 then
@@ -118,7 +118,7 @@ updateShip delta ship =
                         ( Reloading (timeLeft - delta), Nothing )
     in
     ( { ship
-        | rotation = newRotation
+        | angle = newAngle
         , speed = newSpeed
         , position = newPosition
         , gunState = newGunState
@@ -128,7 +128,7 @@ updateShip delta ship =
 
 
 viewShip : Ship -> Svg Msg
-viewShip { position, rotation } =
+viewShip { position, angle } =
     let
         vertices =
             [ vec2 0 -12, vec2 -8 12, vec2 0 8, vec2 8 12 ]
@@ -142,8 +142,8 @@ viewShip { position, rotation } =
                                 Vec2.toRecord v
                         in
                         Vec2.fromRecord
-                            { x = (cos rotation * x) - (sin rotation * y)
-                            , y = (sin rotation * x) + (cos rotation * y)
+                            { x = (cos angle * x) - (sin angle * y)
+                            , y = (sin angle * x) + (cos angle * y)
                             }
                     )
                 |> List.map (Vec2.add position)
@@ -153,18 +153,18 @@ viewShip { position, rotation } =
 
 type alias Bullet =
     { position : Vec2
+    , angle : Float
     , rotation : Float
-    , turn : Float
     }
 
 
 initBullet : Ship -> Bullet
 initBullet ship =
     { position =
-        rotate ship.rotation (vec2 0 -12)
+        rotate ship.angle (vec2 0 -12)
             |> Vec2.add ship.position
-    , rotation = ship.rotation
-    , turn = 0
+    , angle = ship.angle
+    , rotation = 0
     }
 
 
@@ -174,24 +174,24 @@ updateBullet delta bullet =
         | position =
             Vec2.add bullet.position
                 (Vec2.fromRecord
-                    { x = sin bullet.rotation * 350 * delta
-                    , y = negate (cos bullet.rotation * 350 * delta)
+                    { x = sin bullet.angle * 350 * delta
+                    , y = negate (cos bullet.angle * 350 * delta)
                     }
                 )
-        , turn = bullet.turn + (delta * 12)
+        , rotation = bullet.rotation + (delta * 12)
     }
 
 
 viewBullet : Bullet -> Svg Msg
-viewBullet { position, rotation, turn } =
+viewBullet { position, angle, rotation } =
     let
         vertices =
             [ vec2 -3 -3, vec2 3 -3, vec2 3 3, vec2 -3 3 ]
 
         transformed =
             vertices
-                |> List.map (rotate turn)
                 |> List.map (rotate rotation)
+                |> List.map (rotate angle)
                 |> List.map (Vec2.add position)
     in
     Svg.g [] [ viewPolygon transformed ]
@@ -199,9 +199,9 @@ viewBullet { position, rotation, turn } =
 
 type alias Asteroid =
     { vertices : List Vec2
-    , turn : Float
+    , rotation : Float
     , position : Vec2
-    , turnStep : Float
+    , rotationSpeed : Float
     }
 
 
@@ -301,12 +301,12 @@ view model =
 
 updateAsteroid : Float -> Asteroid -> Asteroid
 updateAsteroid delta a =
-    { a | turn = a.turn + (delta * a.turnStep) }
+    { a | rotation = a.rotation + (delta * a.rotationSpeed) }
 
 
 viewAsteroid : Asteroid -> Html msg
 viewAsteroid a =
-    List.map (rotate a.turn) a.vertices
+    List.map (rotate a.rotation) a.vertices
         |> List.map (Vec2.add a.position)
         |> viewPolygon
 
@@ -317,11 +317,11 @@ asteroidGenerator position =
         verticesGenerator =
             Random.list 8 (Random.int 25 40)
 
-        rotationStepGenerator =
+        rotationSpeedGenerator =
             Random.float -0.8 0.8
     in
     Random.map2
-        (\distances turnStep ->
+        (\distances rotationSpeed ->
             { vertices =
                 List.indexedMap
                     (\index distance ->
@@ -336,12 +336,12 @@ asteroidGenerator position =
                     )
                     distances
             , position = position
-            , turn = 0
-            , turnStep = turnStep
+            , rotation = 0
+            , rotationSpeed = rotationSpeed
             }
         )
         verticesGenerator
-        rotationStepGenerator
+        rotationSpeedGenerator
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
