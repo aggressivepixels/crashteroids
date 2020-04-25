@@ -322,11 +322,23 @@ update msg model =
             ( { model
                 | ship = newShip
                 , bullets =
+                    let
+                        newBullets =
+                            List.filter
+                                (isInside
+                                    { top = -8
+                                    , right = model.width + 8
+                                    , bottom = model.height + 8
+                                    , left = -8
+                                    }
+                                )
+                                model.bullets
+                    in
                     if key == " " then
-                        initBullet ship :: model.bullets
+                        initBullet ship :: newBullets
 
                     else
-                        model.bullets
+                        newBullets
                 , asteroids = newAsteroids
                 , seed = newSeed
               }
@@ -368,3 +380,15 @@ keyDecoder : (String -> msg) -> Decoder msg
 keyDecoder toMsg =
     Decode.map toMsg
         (Decode.field "key" Decode.string)
+
+
+isInside :
+    { top : Float, left : Float, right : Float, bottom : Float }
+    -> { r | position : Vec2 }
+    -> Bool
+isInside { top, left, right, bottom } { position } =
+    let
+        { x, y } =
+            Vec2.toRecord position
+    in
+    x > left && x < right && y > top && y < bottom
