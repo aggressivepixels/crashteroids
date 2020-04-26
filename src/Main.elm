@@ -67,7 +67,7 @@ viewShip { position, angle } =
                     )
                 |> List.map (Vec2.add position)
     in
-    S.g [] [ viewPolygon transformed ]
+    viewPolygon transformed
 
 
 updateShip : Float -> Ship -> ( Ship, Maybe Bullet )
@@ -308,6 +308,23 @@ toString v =
     String.fromFloat x ++ "," ++ String.fromFloat y
 
 
+boundingCircleRadius : Vec2 -> List Vec2 -> Float
+boundingCircleRadius center =
+    List.foldl
+        (\vertex currentRadius ->
+            let
+                distance =
+                    Vec2.distance center vertex
+            in
+            if distance > currentRadius then
+                distance
+
+            else
+                currentRadius
+        )
+        0
+
+
 
 -- TEA
 
@@ -390,7 +407,7 @@ update msg model =
                 ( newShip, maybeBullet ) =
                     updateShip delta model.ship
 
-                newBullets =
+                updatedBullets =
                     List.filter
                         (isInside
                             { top = -8
@@ -408,7 +425,7 @@ update msg model =
                         )
                         |> List.map (updateBullet delta)
 
-                newAsteroids =
+                updatedAsteroids =
                     List.map
                         (\asteroid ->
                             let
@@ -443,6 +460,40 @@ update msg model =
                             }
                         )
                         model.asteroids
+
+                newBullets =
+                    List.filter
+                        (\bullet ->
+                            not
+                                (List.any
+                                    (\asteroid ->
+                                        isCircleInsideCircle
+                                            ( bullet.position, 3 )
+                                            ( asteroid.position
+                                            , boundingCircleRadius (vec2 0 0) asteroid.vertices
+                                            )
+                                    )
+                                    updatedAsteroids
+                                )
+                        )
+                        updatedBullets
+
+                newAsteroids =
+                    List.filter
+                        (\asteroid ->
+                            not
+                                (List.any
+                                    (\bullet ->
+                                        isCircleInsideCircle
+                                            ( bullet.position, 3 )
+                                            ( asteroid.position
+                                            , boundingCircleRadius (vec2 0 0) asteroid.vertices
+                                            )
+                                    )
+                                    updatedBullets
+                                )
+                        )
+                        updatedAsteroids
             in
             ( { model
                 | ship = newShip
@@ -501,6 +552,17 @@ update msg model =
                             ship
             in
             ( { model | ship = newShip }, Cmd.none )
+
+
+isCircleInsideCircle ( c1, r1 ) ( c2, r2 ) =
+    let
+        ( x1, x2 ) =
+            ( Vec2.getX c1, Vec2.getX c2 )
+
+        ( y1, y2 ) =
+            ( Vec2.getY c1, Vec2.getY c2 )
+    in
+    ((x2 - x1) ^ 2) + ((y2 - y1) ^ 2) <= ((r1 + r2) ^ 2)
 
 
 subscriptions : Model -> Sub Msg
