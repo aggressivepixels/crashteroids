@@ -3,13 +3,13 @@ module Main exposing (main)
 import Basics.Extra exposing (flip)
 import Browser
 import Browser.Events as Events
-import Html exposing (Html)
-import Html.Attributes
+import Html as H
+import Html.Attributes as HA
 import Json.Decode as Decode exposing (Decoder, Value)
 import Math.Vector2 as Vec2 exposing (Vec2, vec2)
 import Random exposing (Generator, Seed)
-import Svg exposing (Svg)
-import Svg.Attributes
+import Svg as S
+import Svg.Attributes as SA
 
 
 
@@ -29,7 +29,7 @@ type alias Ship =
 
 
 type GunState
-    = Idle
+    = Loaded
     | Reloading Float
 
 
@@ -41,12 +41,12 @@ initShip x y =
     , rotatingLeft = False
     , rotatingRight = False
     , accelerating = False
-    , gunState = Idle
+    , gunState = Loaded
     , pullingTrigger = False
     }
 
 
-viewShip : Ship -> Svg Msg
+viewShip : Ship -> S.Svg Msg
 viewShip { position, angle } =
     let
         vertices =
@@ -67,7 +67,7 @@ viewShip { position, angle } =
                     )
                 |> List.map (Vec2.add position)
     in
-    Svg.g [] [ viewPolygon transformed ]
+    S.g [] [ viewPolygon transformed ]
 
 
 updateShip : Float -> Ship -> ( Ship, Maybe Bullet )
@@ -125,11 +125,11 @@ updateShip delta ship =
 
         ( newGunState, bullet ) =
             case ( ship.gunState, ship.pullingTrigger ) of
-                ( Idle, True ) ->
+                ( Loaded, True ) ->
                     ( Reloading 0.2, Just (initBullet ship) )
 
-                ( Idle, False ) ->
-                    ( Idle, Nothing )
+                ( Loaded, False ) ->
+                    ( Loaded, Nothing )
 
                 ( Reloading timeLeft, True ) ->
                     if timeLeft - delta <= 0 then
@@ -140,7 +140,7 @@ updateShip delta ship =
 
                 ( Reloading timeLeft, False ) ->
                     if timeLeft - delta <= 0 then
-                        ( Idle, Nothing )
+                        ( Loaded, Nothing )
 
                     else
                         ( Reloading (timeLeft - delta), Nothing )
@@ -176,7 +176,7 @@ initBullet ship =
     }
 
 
-viewBullet : Bullet -> Svg Msg
+viewBullet : Bullet -> S.Svg Msg
 viewBullet { position, angle, rotation } =
     let
         vertices =
@@ -188,7 +188,7 @@ viewBullet { position, angle, rotation } =
                 |> List.map (rotate angle)
                 |> List.map (Vec2.add position)
     in
-    Svg.g [] [ viewPolygon transformed ]
+    S.g [] [ viewPolygon transformed ]
 
 
 updateBullet : Float -> Bullet -> Bullet
@@ -218,7 +218,7 @@ type alias Asteroid =
     }
 
 
-viewAsteroid : Asteroid -> Html msg
+viewAsteroid : Asteroid -> S.Svg msg
 viewAsteroid asteroid =
     List.map (rotate asteroid.rotation) asteroid.vertices
         |> List.map (Vec2.add asteroid.position)
@@ -289,12 +289,12 @@ rotate rotation v =
         }
 
 
-viewPolygon : List Vec2 -> Svg msg
+viewPolygon : List Vec2 -> S.Svg msg
 viewPolygon vertices =
-    Svg.polygon
-        [ Svg.Attributes.points (String.join " " (List.map toString vertices))
-        , Html.Attributes.style "stroke" "white"
-        , Html.Attributes.style "stroke-width" "2"
+    S.polygon
+        [ SA.points (String.join " " (List.map toString vertices))
+        , HA.style "stroke" "white"
+        , HA.style "stroke-width" "2"
         ]
         []
 
@@ -344,41 +344,41 @@ init flags =
         ( width, height ) =
             ( 960, 540 )
 
-        oldSeed =
+        initialSeed =
             Decode.decodeValue (Decode.field "initialSeed" Decode.int) flags
                 |> Result.withDefault 0
                 |> Random.initialSeed
 
-        ( asteroids, seed ) =
+        ( asteroids, newSeed ) =
             asteroidGenerator (vec2 (width / 2) (height / 2))
                 |> Random.list 10
-                |> flip Random.step oldSeed
+                |> flip Random.step initialSeed
     in
     ( { width = width
       , height = height
       , ship = initShip (width / 2) (height / 2)
       , bullets = []
       , asteroids = asteroids
-      , seed = seed
+      , seed = newSeed
       }
     , Cmd.none
     )
 
 
-view : Model -> Html Msg
+view : Model -> H.Html Msg
 view model =
-    Svg.svg
-        [ Html.Attributes.width (round model.width)
-        , Html.Attributes.height (round model.height)
-        , Html.Attributes.style "border" "1px gray solid"
-        , Html.Attributes.style "position" "absolute"
-        , Html.Attributes.style "left" "50%"
-        , Html.Attributes.style "top" "50%"
-        , Html.Attributes.style "transform" "translate(-50%, -50%)"
+    S.svg
+        [ HA.width (round model.width)
+        , HA.height (round model.height)
+        , HA.style "border" "1px gray solid"
+        , HA.style "position" "absolute"
+        , HA.style "left" "50%"
+        , HA.style "top" "50%"
+        , HA.style "transform" "translate(-50%, -50%)"
         ]
         [ viewShip model.ship
-        , Svg.g [] (List.map viewBullet model.bullets)
-        , Svg.g [] (List.map viewAsteroid model.asteroids)
+        , S.g [] (List.map viewBullet model.bullets)
+        , S.g [] (List.map viewAsteroid model.asteroids)
         ]
 
 
