@@ -40,7 +40,7 @@ shipVerticesForCollisionDetection =
 
 shipRadius : Float
 shipRadius =
-    boundingCircleRadius ( 0, 0 ) shipVertices
+    boundingCircleRadius shipVertices
 
 
 type GunState
@@ -178,7 +178,7 @@ bulletVerticesForCollisionDetection =
 
 bulletRadius : Float
 bulletRadius =
-    boundingCircleRadius ( 0, 0 ) bulletVertices
+    boundingCircleRadius bulletVertices
 
 
 initBullet : Ship -> Bullet
@@ -278,7 +278,7 @@ initAsteroid : List Vector -> Float -> Vector -> Float -> Asteroid
 initAsteroid vertices rotationSpeed position angle =
     { vertices = vertices
     , verticesForCollisionDetection = repeatFirstVertex vertices
-    , radius = boundingCircleRadius ( 0, 0 ) vertices
+    , radius = boundingCircleRadius vertices
     , rotation = 0
     , rotationSpeed = rotationSpeed
     , position = position
@@ -312,13 +312,13 @@ toString ( x, y ) =
     String.fromFloat x ++ "," ++ String.fromFloat y
 
 
-boundingCircleRadius : Vector -> List Vector -> Float
-boundingCircleRadius center =
+boundingCircleRadius : List Vector -> Float
+boundingCircleRadius =
     List.foldl
         (\vertex currentRadius ->
             let
                 distance =
-                    Vector.distance center vertex
+                    Vector.distance ( 0, 0 ) vertex
             in
             if distance > currentRadius then
                 distance
