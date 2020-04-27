@@ -462,7 +462,29 @@ update msg model =
                         model.asteroids
 
                 ( newBullets, newAsteroids ) =
-                    updateBulletsAndAsteroids updatedBullets updatedAsteroids
+                    List.foldl
+                        (\bullet ( accumulatedBullets, asteroids ) ->
+                            case List.filter (isCollidingWith bullet) asteroids of
+                                [] ->
+                                    -- The bullet doesn't collide with any
+                                    -- asteroid. Add it to the accumulated
+                                    -- bullets list and leave the asteroid list
+                                    -- intact.
+                                    ( bullet :: accumulatedBullets, asteroids )
+
+                                collidingAsteroids ->
+                                    -- The bullet collides with some asteroids.
+                                    -- Don't add it to the accumulated bullets
+                                    -- list and remove the asteroids from the
+                                    -- list.
+                                    ( accumulatedBullets
+                                    , List.filter
+                                        (not << flip List.member collidingAsteroids)
+                                        asteroids
+                                    )
+                        )
+                        ( [], updatedAsteroids )
+                        updatedBullets
             in
             ( { model
                 | ship = newShip
@@ -521,50 +543,6 @@ update msg model =
                             ship
             in
             ( { model | ship = newShip }, Cmd.none )
-
-
-updateBulletsAndAsteroids :
-    List Bullet
-    -> List Asteroid
-    -> ( List Bullet, List Asteroid )
-updateBulletsAndAsteroids =
-    updateBulletsAndAsteroidsHelp []
-
-
-updateBulletsAndAsteroidsHelp :
-    List Bullet
-    -> List Bullet
-    -> List Asteroid
-    -> ( List Bullet, List Asteroid )
-updateBulletsAndAsteroidsHelp accumulatedBullets pendingBullets asteroids =
-    case pendingBullets of
-        [] ->
-            -- No more bullets to process.
-            ( accumulatedBullets, asteroids )
-
-        bullet :: otherBullets ->
-            -- Check if the bullet collides with one (or some) asteroid(s).
-            case List.filter (isCollidingWith bullet) asteroids of
-                [] ->
-                    -- The bullet doesn't collide with any asteroid.
-                    -- Add it to the accumulated bullets list and leave the
-                    -- asteroid list intact.
-                    updateBulletsAndAsteroidsHelp
-                        (bullet :: accumulatedBullets)
-                        otherBullets
-                        asteroids
-
-                collidingAsteroids ->
-                    -- The bullet collides with one (or some) asteroid(s).
-                    -- Don't add it to the accumulated bullets list and remove
-                    -- the asteroid(s) from the list.
-                    updateBulletsAndAsteroidsHelp
-                        accumulatedBullets
-                        otherBullets
-                        (List.filter
-                            (not << flip List.member collidingAsteroids)
-                            asteroids
-                        )
 
 
 isCollidingWith : Bullet -> Asteroid -> Bool
