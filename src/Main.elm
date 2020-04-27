@@ -461,108 +461,8 @@ update msg model =
                         )
                         model.asteroids
 
-                areColliding bullet asteroid =
-                    if
-                        isCircleInsideCircle
-                            ( bullet.position, 3 )
-                            ( asteroid.position
-                            , boundingCircleRadius (vec2 0 0) asteroid.vertices
-                            )
-                    then
-                        let
-                            bulletVertices =
-                                [ vec2 -3 -3, vec2 3 -3, vec2 3 3, vec2 -3 3, vec2 -3 -3 ]
-                                    |> List.map (rotate bullet.angle)
-                                    |> List.map (rotate bullet.rotation)
-                                    |> List.map (Vec2.add bullet.position)
-
-                            asteroidVertices =
-                                (asteroid.vertices
-                                    ++ [ List.head asteroid.vertices
-                                            |> Maybe.withDefault (vec2 0 0)
-                                       ]
-                                )
-                                    |> List.map (rotate asteroid.rotation)
-                                    |> List.map (Vec2.add asteroid.position)
-
-                            crossProduct v1 v2 =
-                                let
-                                    ( x1, x2 ) =
-                                        ( Vec2.getX v1, Vec2.getX v2 )
-
-                                    ( y1, y2 ) =
-                                        ( Vec2.getY v1, Vec2.getY v2 )
-                                in
-                                (x1 * y2) - (x2 * y1)
-
-                            verticesToEdges vertices =
-                                case vertices of
-                                    first :: second :: rest ->
-                                        ( first, second ) :: verticesToEdges (second :: rest)
-
-                                    _ ->
-                                        []
-
-                            isPointInPolygon point polygon =
-                                let
-                                    normals =
-                                        List.map
-                                            (\( v1, v2 ) ->
-                                                let
-                                                    ( x1, x2 ) =
-                                                        ( Vec2.getX v1, Vec2.getX v2 )
-
-                                                    ( y1, y2 ) =
-                                                        ( Vec2.getY v1, Vec2.getY v2 )
-
-                                                    ( px, py ) =
-                                                        ( Vec2.getX point, Vec2.getY point )
-                                                in
-                                                crossProduct (vec2 (x2 - x1) (y2 - y1)) (vec2 (px - x1) (py - y1))
-                                            )
-                                            (verticesToEdges polygon)
-                                in
-                                List.all (flip (>=) 0) normals
-                        in
-                        List.foldl
-                            (\bulletVertex collided ->
-                                if collided then
-                                    True
-
-                                else
-                                    isPointInPolygon bulletVertex asteroidVertices
-                            )
-                            False
-                            bulletVertices
-
-                    else
-                        False
-
-                newBullets =
-                    List.filter
-                        (\bullet ->
-                            not
-                                (List.any
-                                    (\asteroid ->
-                                        areColliding bullet asteroid
-                                    )
-                                    updatedAsteroids
-                                )
-                        )
-                        updatedBullets
-
-                newAsteroids =
-                    List.filter
-                        (\asteroid ->
-                            not
-                                (List.any
-                                    (\bullet ->
-                                        areColliding bullet asteroid
-                                    )
-                                    updatedBullets
-                                )
-                        )
-                        updatedAsteroids
+                ( newBullets, newAsteroids ) =
+                    updateBulletsAndAsteroids updatedBullets updatedAsteroids
             in
             ( { model
                 | ship = newShip
@@ -621,6 +521,129 @@ update msg model =
                             ship
             in
             ( { model | ship = newShip }, Cmd.none )
+
+
+updateBulletsAndAsteroids :
+    List Bullet
+    -> List Asteroid
+    -> ( List Bullet, List Asteroid )
+updateBulletsAndAsteroids =
+    updateBulletsAndAsteroidsHelp []
+
+
+updateBulletsAndAsteroidsHelp :
+    List Bullet
+    -> List Bullet
+    -> List Asteroid
+    -> ( List Bullet, List Asteroid )
+updateBulletsAndAsteroidsHelp accumulatedBullets pendingBullets asteroids =
+    case pendingBullets of
+        [] ->
+            -- No more bullets to process.
+            ( accumulatedBullets, asteroids )
+
+        bullet :: otherBullets ->
+            -- Check if the bullet collides with one (or some) asteroid(s).
+            case List.filter (isCollidingWith bullet) asteroids of
+                [] ->
+                    -- The bullet doesn't collide with any asteroid.
+                    -- Add it to the accumulated bullets list and leave the
+                    -- asteroid list intact.
+                    updateBulletsAndAsteroidsHelp
+                        (bullet :: accumulatedBullets)
+                        otherBullets
+                        asteroids
+
+                collidingAsteroids ->
+                    -- The bullet collides with one (or some) asteroid(s).
+                    -- Don't add it to the accumulated bullets list and remove
+                    -- the asteroid(s) from the list.
+                    updateBulletsAndAsteroidsHelp
+                        accumulatedBullets
+                        otherBullets
+                        (List.filter
+                            (not << flip List.member collidingAsteroids)
+                            asteroids
+                        )
+
+
+isCollidingWith : Bullet -> Asteroid -> Bool
+isCollidingWith bullet asteroid =
+    if
+        isCircleInsideCircle
+            ( bullet.position, 3 )
+            ( asteroid.position
+            , boundingCircleRadius (vec2 0 0) asteroid.vertices
+            )
+    then
+        let
+            bulletVertices =
+                [ vec2 -3 -3, vec2 3 -3, vec2 3 3, vec2 -3 3, vec2 -3 -3 ]
+                    |> List.map (rotate bullet.angle)
+                    |> List.map (rotate bullet.rotation)
+                    |> List.map (Vec2.add bullet.position)
+
+            asteroidVertices =
+                (asteroid.vertices
+                    ++ [ List.head asteroid.vertices
+                            |> Maybe.withDefault (vec2 0 0)
+                       ]
+                )
+                    |> List.map (rotate asteroid.rotation)
+                    |> List.map (Vec2.add asteroid.position)
+
+            crossProduct v1 v2 =
+                let
+                    ( x1, x2 ) =
+                        ( Vec2.getX v1, Vec2.getX v2 )
+
+                    ( y1, y2 ) =
+                        ( Vec2.getY v1, Vec2.getY v2 )
+                in
+                (x1 * y2) - (x2 * y1)
+
+            verticesToEdges vertices =
+                case vertices of
+                    first :: second :: rest ->
+                        ( first, second ) :: verticesToEdges (second :: rest)
+
+                    _ ->
+                        []
+
+            isPointInPolygon point polygon =
+                let
+                    normals =
+                        List.map
+                            (\( v1, v2 ) ->
+                                let
+                                    ( x1, x2 ) =
+                                        ( Vec2.getX v1, Vec2.getX v2 )
+
+                                    ( y1, y2 ) =
+                                        ( Vec2.getY v1, Vec2.getY v2 )
+
+                                    ( px, py ) =
+                                        ( Vec2.getX point, Vec2.getY point )
+                                in
+                                crossProduct (vec2 (x2 - x1) (y2 - y1)) (vec2 (px - x1) (py - y1))
+                            )
+                            (verticesToEdges polygon)
+                in
+                List.all (flip (>=) 0) normals
+        in
+        List.foldl
+            (\bulletVertex collided ->
+                if collided then
+                    True
+
+                else
+                    isPointInPolygon bulletVertex asteroidVertices
+            )
+            False
+            bulletVertices
+
+    else
+        False
 
 
 isCircleInsideCircle ( c1, r1 ) ( c2, r2 ) =
