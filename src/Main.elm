@@ -6,7 +6,7 @@ import Browser.Events as Events
 import Html as H
 import Html.Attributes as HA
 import Json.Decode as Decode exposing (Decoder, Value)
-import Math.Vector2 as Vec2 exposing (Vec2, vec2)
+import Math.Vector as Vector exposing (Vector)
 import Random exposing (Generator, Seed)
 import Svg as S
 import Svg.Attributes as SA
@@ -17,8 +17,8 @@ import Svg.Attributes as SA
 
 
 type alias Ship =
-    { position : Vec2
-    , speed : Vec2
+    { position : Vector
+    , speed : Vector
     , angle : Float
     , rotatingLeft : Bool
     , rotatingRight : Bool
@@ -28,19 +28,19 @@ type alias Ship =
     }
 
 
-shipVertices : List Vec2
+shipVertices : List Vector
 shipVertices =
-    [ vec2 0 -12, vec2 -8 12, vec2 0 8, vec2 8 12 ]
+    [ ( 0, -12 ), ( -8, 12 ), ( 0, 8 ), ( 8, 12 ) ]
 
 
-shipVerticesForCollisionDetection : List Vec2
+shipVerticesForCollisionDetection : List Vector
 shipVerticesForCollisionDetection =
     repeatFirstVertex shipVertices
 
 
 shipRadius : Float
 shipRadius =
-    boundingCircleRadius (vec2 0 0) shipVertices
+    boundingCircleRadius ( 0, 0 ) shipVertices
 
 
 type GunState
@@ -50,8 +50,8 @@ type GunState
 
 initShip : Float -> Float -> Ship
 initShip x y =
-    { position = vec2 x y
-    , speed = vec2 0 0
+    { position = ( x, y )
+    , speed = ( 0, 0 )
     , angle = 0
     , rotatingLeft = False
     , rotatingRight = False
@@ -65,17 +65,12 @@ viewShip : Ship -> S.Svg Msg
 viewShip { position, angle } =
     shipVertices
         |> List.map
-            (\v ->
-                let
-                    { x, y } =
-                        Vec2.toRecord v
-                in
-                Vec2.fromRecord
-                    { x = (cos angle * x) - (sin angle * y)
-                    , y = (sin angle * x) + (cos angle * y)
-                    }
+            (\( x, y ) ->
+                ( (cos angle * x) - (sin angle * y)
+                , (sin angle * x) + (cos angle * y)
+                )
             )
-        |> List.map (Vec2.add position)
+        |> List.map (Vector.add position)
         |> viewPolygon
 
 
@@ -95,41 +90,37 @@ updateShip delta ship =
 
         newSpeed =
             if ship.accelerating then
-                Vec2.add ship.speed <|
-                    Vec2.fromRecord
-                        { x = sin newAngle * 175 * delta
-                        , y = negate (cos newAngle * 175 * delta)
-                        }
+                Vector.add ship.speed
+                    ( sin newAngle * 175 * delta
+                    , -(cos newAngle * 175 * delta)
+                    )
 
-            else if Vec2.lengthSquared ship.speed > 1 then
-                Vec2.scale 0.99 ship.speed
+            else if Vector.lengthSquared ship.speed > 1 then
+                Vector.scale 0.99 ship.speed
 
             else
-                vec2 0 0
+                ( 0, 0 )
 
         newPosition =
-            Vec2.add ship.position (Vec2.scale delta newSpeed)
-                |> Vec2.toRecord
-                |> (\{ x, y } ->
-                        vec2
-                            (if x < 0 then
-                                960
+            Vector.add ship.position (Vector.scale delta newSpeed)
+                |> (\( x, y ) ->
+                        ( if x < 0 then
+                            960
 
-                             else if x > 960 then
-                                0
+                          else if x > 960 then
+                            0
 
-                             else
-                                x
-                            )
-                            (if y < 0 then
-                                540
+                          else
+                            x
+                        , if y < 0 then
+                            540
 
-                             else if y > 540 then
-                                0
+                          else if y > 540 then
+                            0
 
-                             else
-                                y
-                            )
+                          else
+                            y
+                        )
                    )
 
         ( newGunState, bullet ) =
@@ -169,31 +160,30 @@ updateShip delta ship =
 
 
 type alias Bullet =
-    { position : Vec2
+    { position : Vector
     , angle : Float
     , rotation : Float
     }
 
 
-bulletVertices : List Vec2
+bulletVertices : List Vector
 bulletVertices =
-    [ vec2 -3 -3, vec2 3 -3, vec2 3 3, vec2 -3 3 ]
+    [ ( -3, -3 ), ( 3, -3 ), ( 3, 3 ), ( -3, 3 ) ]
 
 
-bulletVerticesForCollisionDetection : List Vec2
+bulletVerticesForCollisionDetection : List Vector
 bulletVerticesForCollisionDetection =
     repeatFirstVertex bulletVertices
 
 
 bulletRadius : Float
 bulletRadius =
-    boundingCircleRadius (vec2 0 0) bulletVertices
+    boundingCircleRadius ( 0, 0 ) bulletVertices
 
 
 initBullet : Ship -> Bullet
 initBullet ship =
-    { position =
-        Vec2.add ship.position (rotate ship.angle (vec2 0 -shipRadius))
+    { position = Vector.add ship.position (rotate ship.angle ( 0, -shipRadius ))
     , angle = ship.angle
     , rotation = 0
     }
@@ -203,7 +193,7 @@ viewBullet : Bullet -> S.Svg Msg
 viewBullet { position, angle, rotation } =
     List.map (rotate rotation) bulletVertices
         |> List.map (rotate angle)
-        |> List.map (Vec2.add position)
+        |> List.map (Vector.add position)
         |> viewPolygon
 
 
@@ -211,11 +201,9 @@ updateBullet : Float -> Bullet -> Bullet
 updateBullet delta bullet =
     { bullet
         | position =
-            Vec2.add bullet.position
-                (Vec2.fromRecord
-                    { x = sin bullet.angle * 350 * delta
-                    , y = negate (cos bullet.angle * 350 * delta)
-                    }
+            Vector.add bullet.position
+                ( sin bullet.angle * 350 * delta
+                , -(cos bullet.angle * 350 * delta)
                 )
         , rotation = bullet.rotation + (delta * 12)
     }
@@ -226,12 +214,12 @@ updateBullet delta bullet =
 
 
 type alias Asteroid =
-    { vertices : List Vec2
-    , verticesForCollisionDetection : List Vec2
+    { vertices : List Vector
+    , verticesForCollisionDetection : List Vector
     , radius : Float
     , rotation : Float
     , rotationSpeed : Float
-    , position : Vec2
+    , position : Vector
     , angle : Float
     }
 
@@ -239,7 +227,7 @@ type alias Asteroid =
 viewAsteroid : Asteroid -> S.Svg msg
 viewAsteroid asteroid =
     List.map (rotate asteroid.rotation) asteroid.vertices
-        |> List.map (Vec2.add asteroid.position)
+        |> List.map (Vector.add asteroid.position)
         |> viewPolygon
 
 
@@ -247,17 +235,15 @@ updateAsteroid : Float -> Asteroid -> Asteroid
 updateAsteroid delta asteroid =
     { asteroid
         | position =
-            Vec2.add asteroid.position
-                (Vec2.fromRecord
-                    { x = sin asteroid.angle * 40 * delta
-                    , y = negate (cos asteroid.angle * 40 * delta)
-                    }
+            Vector.add asteroid.position
+                ( sin asteroid.angle * 40 * delta
+                , -(cos asteroid.angle * 40 * delta)
                 )
         , rotation = asteroid.rotation + (delta * asteroid.rotationSpeed)
     }
 
 
-asteroidGenerator : Vec2 -> Generator Asteroid
+asteroidGenerator : Vector -> Generator Asteroid
 asteroidGenerator _ =
     let
         vertices =
@@ -272,7 +258,7 @@ asteroidGenerator _ =
                                 theta =
                                     degrees (toFloat (index * 45))
                             in
-                            vec2 (r * cos theta) (r * sin theta)
+                            ( r * cos theta, r * sin theta )
                         )
                     )
 
@@ -280,7 +266,7 @@ asteroidGenerator _ =
             Random.float -1 1
 
         position =
-            Random.map2 vec2 (Random.float 0 960) (Random.float 0 540)
+            Random.map2 Vector.from (Random.float 0 960) (Random.float 0 540)
 
         angle =
             Random.map degrees (Random.float 0 360)
@@ -288,11 +274,11 @@ asteroidGenerator _ =
     Random.map4 initAsteroid vertices rotationSpeed position angle
 
 
-initAsteroid : List Vec2 -> Float -> Vec2 -> Float -> Asteroid
+initAsteroid : List Vector -> Float -> Vector -> Float -> Asteroid
 initAsteroid vertices rotationSpeed position angle =
     { vertices = vertices
     , verticesForCollisionDetection = repeatFirstVertex vertices
-    , radius = boundingCircleRadius (vec2 0 0) vertices
+    , radius = boundingCircleRadius ( 0, 0 ) vertices
     , rotation = 0
     , rotationSpeed = rotationSpeed
     , position = position
@@ -304,19 +290,14 @@ initAsteroid vertices rotationSpeed position angle =
 -- HELPER FUNCTIONS
 
 
-rotate : Float -> Vec2 -> Vec2
-rotate rotation v =
-    let
-        { x, y } =
-            Vec2.toRecord v
-    in
-    Vec2.fromRecord
-        { x = (cos rotation * x) - (sin rotation * y)
-        , y = (sin rotation * x) + (cos rotation * y)
-        }
+rotate : Float -> Vector -> Vector
+rotate rotation ( x, y ) =
+    ( (cos rotation * x) - (sin rotation * y)
+    , (sin rotation * x) + (cos rotation * y)
+    )
 
 
-viewPolygon : List Vec2 -> S.Svg msg
+viewPolygon : List Vector -> S.Svg msg
 viewPolygon vertices =
     S.polygon
         [ SA.points (String.join " " (List.map toString vertices))
@@ -326,22 +307,18 @@ viewPolygon vertices =
         []
 
 
-toString : Vec2 -> String
-toString v =
-    let
-        { x, y } =
-            Vec2.toRecord v
-    in
+toString : Vector -> String
+toString ( x, y ) =
     String.fromFloat x ++ "," ++ String.fromFloat y
 
 
-boundingCircleRadius : Vec2 -> List Vec2 -> Float
+boundingCircleRadius : Vector -> List Vector -> Float
 boundingCircleRadius center =
     List.foldl
         (\vertex currentRadius ->
             let
                 distance =
-                    Vec2.distance center vertex
+                    Vector.distance center vertex
             in
             if distance > currentRadius then
                 distance
@@ -394,7 +371,7 @@ init flags =
                 |> Random.initialSeed
 
         ( asteroids, newSeed ) =
-            asteroidGenerator (vec2 (width / 2) (height / 2))
+            asteroidGenerator ( width / 2, height / 2 )
                 |> Random.list 10
                 |> flip Random.step initialSeed
     in
@@ -459,31 +436,28 @@ update msg model =
                                 newAsteroid =
                                     updateAsteroid delta asteroid
 
-                                { x, y } =
-                                    Vec2.toRecord newAsteroid.position
+                                ( x, y ) =
+                                    newAsteroid.position
                             in
                             { newAsteroid
                                 | position =
-                                    Vec2.fromRecord
-                                        { x =
-                                            if x < -40 then
-                                                1000
+                                    ( if x < -40 then
+                                        1000
 
-                                            else if x > 1000 then
-                                                -40
+                                      else if x > 1000 then
+                                        -40
 
-                                            else
-                                                x
-                                        , y =
-                                            if y < -40 then
-                                                600
+                                      else
+                                        x
+                                    , if y < -40 then
+                                        600
 
-                                            else if y > 600 then
-                                                -40
+                                      else if y > 600 then
+                                        -40
 
-                                            else
-                                                y
-                                        }
+                                      else
+                                        y
+                                    )
                             }
                         )
                         model.asteroids
@@ -572,7 +546,7 @@ update msg model =
             ( { model | ship = newShip }, Cmd.none )
 
 
-repeatFirstVertex : List Vec2 -> List Vec2
+repeatFirstVertex : List Vector -> List Vector
 repeatFirstVertex polygon =
     case polygon of
         [] ->
@@ -594,22 +568,12 @@ isCollidingWith bullet asteroid =
                 bulletVerticesForCollisionDetection
                     |> List.map (rotate bullet.angle)
                     |> List.map (rotate bullet.rotation)
-                    |> List.map (Vec2.add bullet.position)
+                    |> List.map (Vector.add bullet.position)
 
             transformedAsteroidVertices =
                 asteroid.verticesForCollisionDetection
                     |> List.map (rotate asteroid.rotation)
-                    |> List.map (Vec2.add asteroid.position)
-
-            crossProduct v1 v2 =
-                let
-                    ( x1, x2 ) =
-                        ( Vec2.getX v1, Vec2.getX v2 )
-
-                    ( y1, y2 ) =
-                        ( Vec2.getY v1, Vec2.getY v2 )
-                in
-                (x1 * y2) - (x2 * y1)
+                    |> List.map (Vector.add asteroid.position)
 
             verticesToEdges vertices =
                 case vertices of
@@ -619,22 +583,12 @@ isCollidingWith bullet asteroid =
                     _ ->
                         []
 
-            isPointInPolygon point polygon =
+            isPointInPolygon ( px, py ) polygon =
                 let
                     normals =
                         List.map
-                            (\( v1, v2 ) ->
-                                let
-                                    ( x1, x2 ) =
-                                        ( Vec2.getX v1, Vec2.getX v2 )
-
-                                    ( y1, y2 ) =
-                                        ( Vec2.getY v1, Vec2.getY v2 )
-
-                                    ( px, py ) =
-                                        ( Vec2.getX point, Vec2.getY point )
-                                in
-                                crossProduct (vec2 (x2 - x1) (y2 - y1)) (vec2 (px - x1) (py - y1))
+                            (\( ( x1, y1 ), ( x2, y2 ) ) ->
+                                Vector.crossProduct ( x2 - x1, y2 - y1 ) ( px - x1, py - y1 )
                             )
                             (verticesToEdges polygon)
                 in
@@ -655,15 +609,8 @@ isCollidingWith bullet asteroid =
         False
 
 
-isCircleInsideCircle : ( Vec2, Float ) -> ( Vec2, Float ) -> Bool
-isCircleInsideCircle ( c1, r1 ) ( c2, r2 ) =
-    let
-        ( x1, x2 ) =
-            ( Vec2.getX c1, Vec2.getX c2 )
-
-        ( y1, y2 ) =
-            ( Vec2.getY c1, Vec2.getY c2 )
-    in
+isCircleInsideCircle : ( Vector, Float ) -> ( Vector, Float ) -> Bool
+isCircleInsideCircle ( ( x1, y1 ), r1 ) ( ( x2, y2 ), r2 ) =
     ((x2 - x1) ^ 2) + ((y2 - y1) ^ 2) <= ((r1 + r2) ^ 2)
 
 
@@ -684,11 +631,11 @@ keyDecoder toMsg =
 
 isInside :
     { top : Float, left : Float, right : Float, bottom : Float }
-    -> { r | position : Vec2 }
+    -> { r | position : Vector }
     -> Bool
 isInside { top, left, right, bottom } { position } =
     let
-        { x, y } =
-            Vec2.toRecord position
+        ( x, y ) =
+            position
     in
     x > left && x < right && y > top && y < bottom
