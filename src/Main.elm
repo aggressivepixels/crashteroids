@@ -28,6 +28,21 @@ type alias Ship =
     }
 
 
+shipVertices : List Vec2
+shipVertices =
+    [ vec2 0 -12, vec2 -8 12, vec2 0 8, vec2 8 12 ]
+
+
+shipVerticesForCollisionDetection : List Vec2
+shipVerticesForCollisionDetection =
+    repeatFirstVertex shipVertices
+
+
+shipRadius : Float
+shipRadius =
+    boundingCircleRadius (vec2 0 0) shipVertices
+
+
 type GunState
     = Loaded
     | Reloading Float
@@ -48,26 +63,20 @@ initShip x y =
 
 viewShip : Ship -> S.Svg Msg
 viewShip { position, angle } =
-    let
-        vertices =
-            [ vec2 0 -12, vec2 -8 12, vec2 0 8, vec2 8 12 ]
-
-        transformed =
-            vertices
-                |> List.map
-                    (\v ->
-                        let
-                            { x, y } =
-                                Vec2.toRecord v
-                        in
-                        Vec2.fromRecord
-                            { x = (cos angle * x) - (sin angle * y)
-                            , y = (sin angle * x) + (cos angle * y)
-                            }
-                    )
-                |> List.map (Vec2.add position)
-    in
-    viewPolygon transformed
+    shipVertices
+        |> List.map
+            (\v ->
+                let
+                    { x, y } =
+                        Vec2.toRecord v
+                in
+                Vec2.fromRecord
+                    { x = (cos angle * x) - (sin angle * y)
+                    , y = (sin angle * x) + (cos angle * y)
+                    }
+            )
+        |> List.map (Vec2.add position)
+        |> viewPolygon
 
 
 updateShip : Float -> Ship -> ( Ship, Maybe Bullet )
@@ -166,11 +175,25 @@ type alias Bullet =
     }
 
 
+bulletVertices : List Vec2
+bulletVertices =
+    [ vec2 -3 -3, vec2 3 -3, vec2 3 3, vec2 -3 3 ]
+
+
+bulletVerticesForCollisionDetection : List Vec2
+bulletVerticesForCollisionDetection =
+    repeatFirstVertex bulletVertices
+
+
+bulletRadius : Float
+bulletRadius =
+    boundingCircleRadius (vec2 0 0) bulletVertices
+
+
 initBullet : Ship -> Bullet
 initBullet ship =
     { position =
-        rotate ship.angle (vec2 0 -12)
-            |> Vec2.add ship.position
+        Vec2.add ship.position (rotate ship.angle (vec2 0 -shipRadius))
     , angle = ship.angle
     , rotation = 0
     }
@@ -178,17 +201,10 @@ initBullet ship =
 
 viewBullet : Bullet -> S.Svg Msg
 viewBullet { position, angle, rotation } =
-    let
-        vertices =
-            [ vec2 -3 -3, vec2 3 -3, vec2 3 3, vec2 -3 3 ]
-
-        transformed =
-            vertices
-                |> List.map (rotate rotation)
-                |> List.map (rotate angle)
-                |> List.map (Vec2.add position)
-    in
-    S.g [] [ viewPolygon transformed ]
+    List.map (rotate rotation) bulletVertices
+        |> List.map (rotate angle)
+        |> List.map (Vec2.add position)
+        |> viewPolygon
 
 
 updateBullet : Float -> Bullet -> Bullet
@@ -211,6 +227,8 @@ updateBullet delta bullet =
 
 type alias Asteroid =
     { vertices : List Vec2
+    , verticesForCollisionDetection : List Vec2
+    , radius : Float
     , rotation : Float
     , rotationSpeed : Float
     , position : Vec2
@@ -258,9 +276,6 @@ asteroidGenerator _ =
                         )
                     )
 
-        rotation =
-            Random.constant 0
-
         rotationSpeed =
             Random.float -1 1
 
@@ -270,7 +285,19 @@ asteroidGenerator _ =
         angle =
             Random.map degrees (Random.float 0 360)
     in
-    Random.map5 Asteroid vertices rotation rotationSpeed position angle
+    Random.map4 initAsteroid vertices rotationSpeed position angle
+
+
+initAsteroid : List Vec2 -> Float -> Vec2 -> Float -> Asteroid
+initAsteroid vertices rotationSpeed position angle =
+    { vertices = vertices
+    , verticesForCollisionDetection = repeatFirstVertex vertices
+    , radius = boundingCircleRadius (vec2 0 0) vertices
+    , rotation = 0
+    , rotationSpeed = rotationSpeed
+    , position = position
+    , angle = angle
+    }
 
 
 
@@ -545,28 +572,32 @@ update msg model =
             ( { model | ship = newShip }, Cmd.none )
 
 
+repeatFirstVertex : List Vec2 -> List Vec2
+repeatFirstVertex polygon =
+    case polygon of
+        [] ->
+            []
+
+        first :: rest ->
+            first :: rest ++ [ first ]
+
+
 isCollidingWith : Bullet -> Asteroid -> Bool
 isCollidingWith bullet asteroid =
     if
         isCircleInsideCircle
-            ( bullet.position, 3 )
-            ( asteroid.position
-            , boundingCircleRadius (vec2 0 0) asteroid.vertices
-            )
+            ( bullet.position, bulletRadius )
+            ( asteroid.position, asteroid.radius )
     then
         let
-            bulletVertices =
-                [ vec2 -3 -3, vec2 3 -3, vec2 3 3, vec2 -3 3, vec2 -3 -3 ]
+            transformedBulletVertices =
+                bulletVerticesForCollisionDetection
                     |> List.map (rotate bullet.angle)
                     |> List.map (rotate bullet.rotation)
                     |> List.map (Vec2.add bullet.position)
 
-            asteroidVertices =
-                (asteroid.vertices
-                    ++ [ List.head asteroid.vertices
-                            |> Maybe.withDefault (vec2 0 0)
-                       ]
-                )
+            transformedAsteroidVertices =
+                asteroid.verticesForCollisionDetection
                     |> List.map (rotate asteroid.rotation)
                     |> List.map (Vec2.add asteroid.position)
 
@@ -615,15 +646,16 @@ isCollidingWith bullet asteroid =
                     True
 
                 else
-                    isPointInPolygon bulletVertex asteroidVertices
+                    isPointInPolygon bulletVertex transformedAsteroidVertices
             )
             False
-            bulletVertices
+            transformedBulletVertices
 
     else
         False
 
 
+isCircleInsideCircle : ( Vec2, Float ) -> ( Vec2, Float ) -> Bool
 isCircleInsideCircle ( c1, r1 ) ( c2, r2 ) =
     let
         ( x1, x2 ) =
