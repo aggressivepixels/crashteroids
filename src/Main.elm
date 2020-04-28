@@ -28,6 +28,11 @@ type alias Ship =
     }
 
 
+type GunState
+    = Loaded
+    | Reloading Float
+
+
 shipVertices : List Vector
 shipVertices =
     [ ( 0, -12 ), ( -8, 12 ), ( 0, 8 ), ( 8, 12 ) ]
@@ -41,11 +46,6 @@ shipVerticesForCollisionDetection =
 shipRadius : Float
 shipRadius =
     boundingCircleRadius shipVertices
-
-
-type GunState
-    = Loaded
-    | Reloading Float
 
 
 initShip : Float -> Float -> Ship
@@ -221,7 +221,14 @@ type alias Asteroid =
     , rotationSpeed : Float
     , position : Vector
     , angle : Float
+    , size : Size
     }
+
+
+type Size
+    = Large
+    | Medium
+    | Small
 
 
 viewAsteroid : Asteroid -> S.Svg msg
@@ -243,11 +250,22 @@ updateAsteroid delta asteroid =
     }
 
 
-asteroidGenerator : Vector -> Generator Asteroid
-asteroidGenerator _ =
+asteroidGenerator : Vector -> Size -> Generator Asteroid
+asteroidGenerator _ size =
     let
+        ( vertexCount, ( low, high ) ) =
+            case size of
+                Large ->
+                    ( 8, ( 25, 40 ) )
+
+                Medium ->
+                    ( 6, ( 15, 25 ) )
+
+                Small ->
+                    ( 5, ( 6, 12 ) )
+
         vertices =
-            Random.list 8 (Random.int 25 40)
+            Random.list vertexCount (Random.int low high)
                 |> Random.map
                     (List.indexedMap
                         (\index distance ->
@@ -256,7 +274,7 @@ asteroidGenerator _ =
                                     toFloat distance
 
                                 theta =
-                                    degrees (toFloat (index * 45))
+                                    degrees (toFloat index * (360 / toFloat vertexCount))
                             in
                             ( r * cos theta, r * sin theta )
                         )
@@ -271,11 +289,16 @@ asteroidGenerator _ =
         angle =
             Random.map degrees (Random.float 0 360)
     in
-    Random.map4 initAsteroid vertices rotationSpeed position angle
+    Random.map5 initAsteroid
+        vertices
+        rotationSpeed
+        position
+        angle
+        (Random.constant size)
 
 
-initAsteroid : List Vector -> Float -> Vector -> Float -> Asteroid
-initAsteroid vertices rotationSpeed position angle =
+initAsteroid : List Vector -> Float -> Vector -> Float -> Size -> Asteroid
+initAsteroid vertices rotationSpeed position angle size =
     { vertices = vertices
     , verticesForCollisionDetection = repeatFirstVertex vertices
     , radius = boundingCircleRadius vertices
@@ -283,6 +306,7 @@ initAsteroid vertices rotationSpeed position angle =
     , rotationSpeed = rotationSpeed
     , position = position
     , angle = angle
+    , size = size
     }
 
 
@@ -371,7 +395,7 @@ init flags =
                 |> Random.initialSeed
 
         ( asteroids, newSeed ) =
-            asteroidGenerator ( width / 2, height / 2 )
+            asteroidGenerator ( width / 2, height / 2 ) Large
                 |> Random.list 10
                 |> flip Random.step initialSeed
     in
@@ -588,7 +612,9 @@ isCollidingWith bullet asteroid =
                     normals =
                         List.map
                             (\( ( x1, y1 ), ( x2, y2 ) ) ->
-                                Vector.crossProduct ( x2 - x1, y2 - y1 ) ( px - x1, py - y1 )
+                                Vector.crossProduct
+                                    ( x2 - x1, y2 - y1 )
+                                    ( px - x1, py - y1 )
                             )
                             (verticesToEdges polygon)
                 in
