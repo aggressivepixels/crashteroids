@@ -8,6 +8,7 @@ import Html.Attributes as HA
 import Json.Decode as Decode exposing (Decoder, Value)
 import Math.Vector as Vector exposing (Vector)
 import Random exposing (Generator, Seed)
+import Random.Extra
 import Svg as S
 import Svg.Attributes as SA
 
@@ -522,7 +523,7 @@ update msg model =
                     model.ship
 
                 newShip =
-                    case key of
+                    case String.toLower key of
                         "a" ->
                             { ship | rotatingLeft = True }
 
@@ -548,7 +549,7 @@ update msg model =
                     model.ship
 
                 newShip =
-                    case key of
+                    case String.toLower key of
                         "a" ->
                             { ship | rotatingLeft = False }
 
@@ -592,12 +593,14 @@ processAsteroidCollision bullet collidingAsteroids seed =
                             Large ->
                                 [ -45, 0, 45 ]
                                     |> List.map (makeAsteroid asteroid.position Medium)
-                                    |> flip stepList seedSoFar
+                                    |> Random.Extra.sequence
+                                    |> flip Random.step seedSoFar
 
                             Medium ->
                                 [ -45, 0, 45 ]
                                     |> List.map (makeAsteroid asteroid.position Small)
-                                    |> flip stepList seedSoFar
+                                    |> Random.Extra.sequence
+                                    |> flip Random.step seedSoFar
 
                             Small ->
                                 ( [], seed )
@@ -607,20 +610,9 @@ processAsteroidCollision bullet collidingAsteroids seed =
                 )
 
             else
-                ( asteroid :: asteroidsSoFar, seed )
+                ( asteroid :: asteroidsSoFar, seedSoFar )
         )
         ( [], seed )
-
-
-stepList : List (Generator a) -> Seed -> ( List a, Seed )
-stepList generators seed =
-    case generators of
-        [] ->
-            ( [], seed )
-
-        first :: rest ->
-            List.foldr (Random.map2 (::)) (Random.map List.singleton first) rest
-                |> flip Random.step seed
 
 
 repeatFirstVertex : List Vector -> List Vector
