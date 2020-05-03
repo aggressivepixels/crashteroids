@@ -12,6 +12,13 @@ import Svg as S
 import Svg.Attributes as SA
 
 
+type alias Bounded r =
+    { r
+        | width : Float
+        , height : Float
+    }
+
+
 
 -- SHIP
 
@@ -74,8 +81,8 @@ viewShip { position, angle } =
         |> viewPolygon
 
 
-updateShip : Float -> Ship -> ( Ship, Maybe Bullet )
-updateShip delta ship =
+updateShip : Bounded r -> Float -> Ship -> ( Ship, Maybe Bullet )
+updateShip bounds delta ship =
     let
         newAngle =
             case ( ship.rotatingLeft, ship.rotatingRight ) of
@@ -103,25 +110,9 @@ updateShip delta ship =
 
         newPosition =
             Vector.add ship.position (Vector.scale delta newSpeed)
-                |> (\( x, y ) ->
-                        ( if x < 0 then
-                            960
-
-                          else if x > 960 then
-                            0
-
-                          else
-                            x
-                        , if y < 0 then
-                            540
-
-                          else if y > 540 then
-                            0
-
-                          else
-                            y
-                        )
-                   )
+                |> Tuple.mapBoth
+                    (wrapBetween 0 bounds.width)
+                    (wrapBetween 0 bounds.height)
 
         ( newGunState, bullet ) =
             case ( ship.gunState, ship.pullingTrigger ) of
@@ -222,6 +213,7 @@ type alias Asteroid =
     , position : Vector
     , angle : Float
     , size : Size
+    , speed : Float
     }
 
 
@@ -243,15 +235,32 @@ updateAsteroid delta asteroid =
     { asteroid
         | position =
             Vector.add asteroid.position
-                ( sin asteroid.angle * 40 * delta
-                , -(cos asteroid.angle * 40 * delta)
+                ( sin asteroid.angle * asteroid.speed * delta
+                , -(cos asteroid.angle * asteroid.speed * delta)
                 )
         , rotation = asteroid.rotation + (delta * asteroid.rotationSpeed)
     }
 
 
-asteroidGenerator : Vector -> Size -> Generator Asteroid
-asteroidGenerator _ size =
+asteroidAngleGenerator : Generator Float
+asteroidAngleGenerator =
+    Random.map degrees (Random.float 0 360)
+
+
+asteroidRotationSpeedGenerator : Generator Float
+asteroidRotationSpeedGenerator =
+    Random.float -1 1
+
+
+asteroidPositionGenerator : Bounded r -> Generator Vector
+asteroidPositionGenerator bounds =
+    Random.map2 Vector.from
+        (Random.float 0 bounds.width)
+        (Random.float 0 bounds.height)
+
+
+asteroidVerticesGenerator : Size -> Generator (List Vector)
+asteroidVerticesGenerator size =
     let
         ( vertexCount, ( low, high ) ) =
             case size of
@@ -263,38 +272,21 @@ asteroidGenerator _ size =
 
                 Small ->
                     ( 5, ( 6, 12 ) )
-
-        vertices =
-            Random.list vertexCount (Random.int low high)
-                |> Random.map
-                    (List.indexedMap
-                        (\index distance ->
-                            let
-                                r =
-                                    toFloat distance
-
-                                theta =
-                                    degrees (toFloat index * (360 / toFloat vertexCount))
-                            in
-                            ( r * cos theta, r * sin theta )
-                        )
-                    )
-
-        rotationSpeed =
-            Random.float -1 1
-
-        position =
-            Random.map2 Vector.from (Random.float 0 960) (Random.float 0 540)
-
-        angle =
-            Random.map degrees (Random.float 0 360)
     in
-    Random.map5 initAsteroid
-        vertices
-        rotationSpeed
-        position
-        angle
-        (Random.constant size)
+    Random.list vertexCount (Random.int low high)
+        |> Random.map
+            (List.indexedMap
+                (\index distance ->
+                    let
+                        r =
+                            toFloat distance
+
+                        theta =
+                            degrees (toFloat index * (360 / toFloat vertexCount))
+                    in
+                    ( r * cos theta, r * sin theta )
+                )
+            )
 
 
 initAsteroid : List Vector -> Float -> Vector -> Float -> Size -> Asteroid
@@ -307,6 +299,16 @@ initAsteroid vertices rotationSpeed position angle size =
     , position = position
     , angle = angle
     , size = size
+    , speed =
+        case size of
+            Small ->
+                100
+
+            Medium ->
+                75
+
+            Large ->
+                40
     }
 
 
@@ -395,7 +397,12 @@ init flags =
                 |> Random.initialSeed
 
         ( asteroids, newSeed ) =
-            asteroidGenerator ( width / 2, height / 2 ) Large
+            Random.map5 initAsteroid
+                (asteroidVerticesGenerator Large)
+                asteroidRotationSpeedGenerator
+                (asteroidPositionGenerator { width = width, height = height })
+                asteroidAngleGenerator
+                (Random.constant Large)
                 |> Random.list 10
                 |> flip Random.step initialSeed
     in
@@ -433,15 +440,15 @@ update msg model =
         FramePassed delta ->
             let
                 ( newShip, maybeBullet ) =
-                    updateShip delta model.ship
+                    updateShip model delta model.ship
 
                 updatedBullets =
                     List.filter
                         (isInside
-                            { top = -8
-                            , right = model.width + 8
-                            , bottom = model.height + 8
-                            , left = -8
+                            { top = bulletRadius
+                            , right = model.width + bulletRadius
+                            , bottom = model.height + bulletRadius
+                            , left = -bulletRadius
                             }
                         )
                         (case maybeBullet of
@@ -459,62 +466,52 @@ update msg model =
                             let
                                 newAsteroid =
                                     updateAsteroid delta asteroid
-
-                                ( x, y ) =
-                                    newAsteroid.position
                             in
                             { newAsteroid
                                 | position =
-                                    ( if x < -40 then
-                                        1000
-
-                                      else if x > 1000 then
-                                        -40
-
-                                      else
-                                        x
-                                    , if y < -40 then
-                                        600
-
-                                      else if y > 600 then
-                                        -40
-
-                                      else
-                                        y
-                                    )
+                                    Tuple.mapBoth
+                                        (wrapBetween
+                                            -newAsteroid.radius
+                                            (model.width + newAsteroid.radius)
+                                        )
+                                        (wrapBetween
+                                            -newAsteroid.radius
+                                            (model.height + newAsteroid.radius)
+                                        )
+                                        newAsteroid.position
                             }
                         )
                         model.asteroids
 
-                ( newBullets, newAsteroids ) =
+                ( newBullets, newAsteroids, newSeed ) =
                     List.foldl
-                        (\bullet ( accumulatedBullets, asteroids ) ->
+                        (\bullet ( accumulatedBullets, asteroids, seed ) ->
                             case List.filter (isCollidingWith bullet) asteroids of
                                 [] ->
-                                    -- The bullet doesn't collide with any
-                                    -- asteroid. Add it to the accumulated
-                                    -- bullets list and leave the asteroid list
-                                    -- intact.
-                                    ( bullet :: accumulatedBullets, asteroids )
+                                    ( bullet :: accumulatedBullets, asteroids, seed )
 
                                 collidingAsteroids ->
-                                    -- The bullet collides with some asteroids.
-                                    -- Don't add it to the accumulated bullets
-                                    -- list and remove the asteroids from the
-                                    -- list.
+                                    let
+                                        ( accumulatedAsteroids, accumulatedSeed ) =
+                                            processAsteroidCollision
+                                                bullet
+                                                collidingAsteroids
+                                                seed
+                                                asteroids
+                                    in
                                     ( accumulatedBullets
-                                    , List.filter
-                                        (not << flip List.member collidingAsteroids)
-                                        asteroids
+                                    , accumulatedAsteroids
+                                    , accumulatedSeed
                                     )
                         )
-                        ( [], updatedAsteroids )
+                        ( [], updatedAsteroids, model.seed )
                         updatedBullets
             in
             ( { model
                 | ship = newShip
                 , bullets = newBullets
                 , asteroids = newAsteroids
+                , seed = newSeed
               }
             , Cmd.none
             )
@@ -570,6 +567,62 @@ update msg model =
             ( { model | ship = newShip }, Cmd.none )
 
 
+processAsteroidCollision :
+    Bullet
+    -> List Asteroid
+    -> Seed
+    -> List Asteroid
+    -> ( List Asteroid, Seed )
+processAsteroidCollision bullet collidingAsteroids seed =
+    let
+        makeAsteroid position size angle =
+            Random.map5 initAsteroid
+                (asteroidVerticesGenerator size)
+                asteroidRotationSpeedGenerator
+                (Random.constant position)
+                (Random.constant (bullet.angle + angle))
+                (Random.constant size)
+    in
+    List.foldl
+        (\asteroid ( asteroidsSoFar, seedSoFar ) ->
+            if List.member asteroid collidingAsteroids then
+                let
+                    ( generatedAsteroids, newSeedSoFar ) =
+                        case asteroid.size of
+                            Large ->
+                                [ -45, 0, 45 ]
+                                    |> List.map (makeAsteroid asteroid.position Medium)
+                                    |> flip stepList seedSoFar
+
+                            Medium ->
+                                [ -45, 0, 45 ]
+                                    |> List.map (makeAsteroid asteroid.position Small)
+                                    |> flip stepList seedSoFar
+
+                            Small ->
+                                ( [], seed )
+                in
+                ( generatedAsteroids ++ asteroidsSoFar
+                , newSeedSoFar
+                )
+
+            else
+                ( asteroid :: asteroidsSoFar, seed )
+        )
+        ( [], seed )
+
+
+stepList : List (Generator a) -> Seed -> ( List a, Seed )
+stepList generators seed =
+    case generators of
+        [] ->
+            ( [], seed )
+
+        first :: rest ->
+            List.foldr (Random.map2 (::)) (Random.map List.singleton first) rest
+                |> flip Random.step seed
+
+
 repeatFirstVertex : List Vector -> List Vector
 repeatFirstVertex polygon =
     case polygon of
@@ -598,41 +651,48 @@ isCollidingWith bullet asteroid =
                 asteroid.verticesForCollisionDetection
                     |> List.map (rotate asteroid.rotation)
                     |> List.map (Vector.add asteroid.position)
-
-            verticesToEdges vertices =
-                case vertices of
-                    first :: second :: rest ->
-                        ( first, second ) :: verticesToEdges (second :: rest)
-
-                    _ ->
-                        []
-
-            isPointInPolygon ( px, py ) polygon =
-                let
-                    normals =
-                        List.map
-                            (\( ( x1, y1 ), ( x2, y2 ) ) ->
-                                Vector.crossProduct
-                                    ( x2 - x1, y2 - y1 )
-                                    ( px - x1, py - y1 )
-                            )
-                            (verticesToEdges polygon)
-                in
-                List.all (flip (>=) 0) normals
         in
-        List.foldl
-            (\bulletVertex collided ->
-                if collided then
-                    True
-
-                else
-                    isPointInPolygon bulletVertex transformedAsteroidVertices
-            )
-            False
-            transformedBulletVertices
+        isCollidingWithHelp transformedBulletVertices transformedAsteroidVertices
 
     else
         False
+
+
+isCollidingWithHelp : List Vector -> List Vector -> Bool
+isCollidingWithHelp transformedBulletVertices transformedAsteroidVertices =
+    case transformedBulletVertices of
+        [] ->
+            False
+
+        bulletVertex :: otherBulletVertices ->
+            if isPointInPolygon bulletVertex transformedAsteroidVertices then
+                True
+
+            else
+                isCollidingWithHelp otherBulletVertices transformedAsteroidVertices
+
+
+verticesToEdges : List Vector -> List ( Vector, Vector )
+verticesToEdges vertices =
+    case vertices of
+        first :: second :: rest ->
+            ( first, second ) :: verticesToEdges (second :: rest)
+
+        _ ->
+            []
+
+
+isPointInPolygon : Vector -> List Vector -> Bool
+isPointInPolygon ( px, py ) polygon =
+    let
+        normals =
+            List.map
+                (\( ( x1, y1 ), ( x2, y2 ) ) ->
+                    Vector.crossProduct ( x2 - x1, y2 - y1 ) ( px - x1, py - y1 )
+                )
+                (verticesToEdges polygon)
+    in
+    List.all (flip (>=) 0) normals
 
 
 isCircleInsideCircle : ( Vector, Float ) -> ( Vector, Float ) -> Bool
@@ -643,7 +703,7 @@ isCircleInsideCircle ( ( x1, y1 ), r1 ) ( ( x2, y2 ), r2 ) =
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
-        [ Events.onAnimationFrameDelta (\delta -> FramePassed (delta / 1000))
+        [ Events.onAnimationFrameDelta (FramePassed << flip (/) 1000)
         , Events.onKeyDown (keyDecoder KeyPressed)
         , Events.onKeyUp (keyDecoder KeyReleased)
         ]
@@ -665,3 +725,13 @@ isInside { top, left, right, bottom } { position } =
             position
     in
     x > left && x < right && y > top && y < bottom
+
+
+fmodBy : Float -> Float -> Float
+fmodBy modulus value =
+    value - modulus * toFloat (floor (value / modulus))
+
+
+wrapBetween : Float -> Float -> Float -> Float
+wrapBetween low high value =
+    fmodBy (high - low) (value - low) + low
