@@ -1,6 +1,6 @@
 module Main exposing (main)
 
-import Basics.Extra exposing (flip)
+import Basics.Extra exposing (flip, fmodBy)
 import Browser
 import Browser.Events as Events
 import Html as H
@@ -372,8 +372,48 @@ type alias Model =
 
 type Msg
     = FramePassed Float
-    | KeyPressed String
-    | KeyReleased String
+    | KeyPressed Key
+    | KeyReleased Key
+
+
+type Key
+    = Left
+    | Up
+    | Right
+    | Space
+
+
+keyFromString : String -> Maybe Key
+keyFromString s =
+    case String.toLower s of
+        "a" ->
+            Just Left
+
+        "w" ->
+            Just Up
+
+        "d" ->
+            Just Right
+
+        " " ->
+            Just Space
+
+        _ ->
+            Nothing
+
+
+keyDecoder : (Key -> msg) -> Decoder msg
+keyDecoder toMsg =
+    Decode.field "key" Decode.string
+        |> Decode.andThen
+            (\s ->
+                case keyFromString s of
+                    Just key ->
+                        Decode.succeed (toMsg key)
+
+                    Nothing ->
+                        Decode.fail ("Not interested in " ++ s)
+            )
 
 
 main : Program Value Model Msg
@@ -523,21 +563,18 @@ update msg model =
                     model.ship
 
                 newShip =
-                    case String.toLower key of
-                        "a" ->
+                    case key of
+                        Left ->
                             { ship | rotatingLeft = True }
 
-                        "d" ->
-                            { ship | rotatingRight = True }
-
-                        "w" ->
+                        Up ->
                             { ship | accelerating = True }
 
-                        " " ->
-                            { ship | pullingTrigger = True }
+                        Right ->
+                            { ship | rotatingRight = True }
 
-                        _ ->
-                            ship
+                        Space ->
+                            { ship | pullingTrigger = True }
             in
             ( { model | ship = newShip }
             , Cmd.none
@@ -549,21 +586,18 @@ update msg model =
                     model.ship
 
                 newShip =
-                    case String.toLower key of
-                        "a" ->
+                    case key of
+                        Left ->
                             { ship | rotatingLeft = False }
 
-                        "d" ->
-                            { ship | rotatingRight = False }
-
-                        "w" ->
+                        Up ->
                             { ship | accelerating = False }
 
-                        " " ->
-                            { ship | pullingTrigger = False }
+                        Right ->
+                            { ship | rotatingRight = False }
 
-                        _ ->
-                            ship
+                        Space ->
+                            { ship | pullingTrigger = False }
             in
             ( { model | ship = newShip }, Cmd.none )
 
@@ -701,12 +735,6 @@ subscriptions _ =
         ]
 
 
-keyDecoder : (String -> msg) -> Decoder msg
-keyDecoder toMsg =
-    Decode.map toMsg
-        (Decode.field "key" Decode.string)
-
-
 isInside :
     { top : Float, left : Float, right : Float, bottom : Float }
     -> { r | position : Vector }
@@ -717,11 +745,6 @@ isInside { top, left, right, bottom } { position } =
             position
     in
     x > left && x < right && y > top && y < bottom
-
-
-fmodBy : Float -> Float -> Float
-fmodBy modulus value =
-    value - modulus * toFloat (floor (value / modulus))
 
 
 wrapBetween : Float -> Float -> Float -> Float
