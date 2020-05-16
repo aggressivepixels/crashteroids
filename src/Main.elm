@@ -194,8 +194,8 @@ updateBullet delta bullet =
     { bullet
         | position =
             Vector.add bullet.position
-                ( sin bullet.angle * 350 * delta
-                , -(cos bullet.angle * 350 * delta)
+                ( sin bullet.angle * 500 * delta
+                , -(cos bullet.angle * 500 * delta)
                 )
         , rotation = bullet.rotation + (delta * 12)
     }
@@ -576,9 +576,7 @@ update msg model =
                         Space ->
                             { ship | pullingTrigger = True }
             in
-            ( { model | ship = newShip }
-            , Cmd.none
-            )
+            ( { model | ship = newShip }, Cmd.none )
 
         KeyReleased key ->
             let
@@ -617,36 +615,28 @@ processAsteroidCollision bullet collidingAsteroids seed =
                 (Random.constant position)
                 (Random.constant (bullet.angle + angle))
                 (Random.constant size)
+
+        makeAsteroids position size =
+            List.map (makeAsteroid position size) [ -45, 0, 45 ]
     in
-    List.foldl
-        (\asteroid ( asteroidsSoFar, seedSoFar ) ->
+    List.concatMap
+        (\asteroid ->
             if List.member asteroid collidingAsteroids then
-                let
-                    ( generatedAsteroids, newSeedSoFar ) =
-                        case asteroid.size of
-                            Large ->
-                                [ -45, 0, 45 ]
-                                    |> List.map (makeAsteroid asteroid.position Medium)
-                                    |> Random.Extra.sequence
-                                    |> flip Random.step seedSoFar
+                case asteroid.size of
+                    Large ->
+                        makeAsteroids asteroid.position Medium
 
-                            Medium ->
-                                [ -45, 0, 45 ]
-                                    |> List.map (makeAsteroid asteroid.position Small)
-                                    |> Random.Extra.sequence
-                                    |> flip Random.step seedSoFar
+                    Medium ->
+                        makeAsteroids asteroid.position Small
 
-                            Small ->
-                                ( [], seed )
-                in
-                ( generatedAsteroids ++ asteroidsSoFar
-                , newSeedSoFar
-                )
+                    Small ->
+                        []
 
             else
-                ( asteroid :: asteroidsSoFar, seedSoFar )
+                [ Random.constant asteroid ]
         )
-        ( [], seed )
+        >> Random.Extra.sequence
+        >> flip Random.step seed
 
 
 repeatFirstVertex : List Vector -> List Vector
