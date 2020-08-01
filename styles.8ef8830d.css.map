@@ -1,0 +1,1 @@
+{"version":3,"sources":["styles.css"],"names":[],"mappings":"AAAA,UAEE,WAAY,CACZ,UACF,CAEA,KACE,qBAAuB,CACvB,aAAiB,CACjB,QACF","file":"styles.8ef8830d.css","sourceRoot":"..","sourcesContent":["html,\nbody {\n  height: 100%;\n  width: 100%;\n}\n\nbody {\n  background-color: black;\n  color: whitesmoke;\n  margin: 0px;\n}\n"]}
